@@ -129,3 +129,12 @@ Each phase ends with passing tests and a commit.
 
 - Downloading the LiveKit server binary (about 40 MB from GitHub releases) on first `npm run dev`.
 - Real stream keys or OAuth client IDs when you want to test against the actual platforms.
+
+## Changes made while building
+
+- No Redis job queue between API and workers; see "No app-level queue" in `docs/ARCHITECTURE.md`.
+- Stage order is changed with a "Make main" button per source, not drag and drop.
+- Renaming a participant from the studio is not built; guests choose their name when joining.
+- Recordings and uploaded images are stored on a local volume, not object storage.
+- The relay broadcaster pushes canvas frames with `MediaStreamTrackGenerator` instead of
+  `canvas.captureStream()`, which starves the encoder when the page is not painting.

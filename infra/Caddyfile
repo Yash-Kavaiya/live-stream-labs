@@ -1,0 +1,21 @@
+# Single public origin. Set SITE_ADDRESS to your domain for automatic HTTPS (required in
+# production: browsers only allow camera and microphone on HTTPS).
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	@api path /api/* /assets/*
+	handle @api {
+		reverse_proxy api:4000
+	}
+
+	# The host's program stream. Long-lived WebSocket; any worker can take any connection.
+	handle /ingest {
+		reverse_proxy worker:4100
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
