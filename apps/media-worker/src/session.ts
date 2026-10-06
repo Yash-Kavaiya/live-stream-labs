@@ -28,6 +28,8 @@ export class EgressSession {
   private stopping = false;
   private lastError: string | null = null;
   private killTimer: NodeJS.Timeout | undefined;
+  /** Last few non-progress log lines, printed when ffmpeg exits abnormally. */
+  private readonly logTail: string[] = [];
   readonly done: Promise<void>;
 
   constructor(private readonly opts: SessionOptions) {
@@ -92,6 +94,12 @@ export class EgressSession {
   }
 
   private onLogLine(line: string): void {
+    // FFMPEG_LOG=1 prints ffmpeg's full log, for diagnosing a stream that will not start.
+    if (process.env.FFMPEG_LOG) this.opts.log(`ffmpeg: ${line.trim()}`);
+    if (line.trim() && !isProgressLine(line)) {
+      this.logTail.push(line.trim());
+      if (this.logTail.length > 12) this.logTail.shift();
+    }
     const failed = parseFailedOutput(line);
     if (failed !== null) {
       const target = this.targets[failed];
@@ -130,6 +138,7 @@ export class EgressSession {
       target.error = failed ? (this.lastError ?? `ffmpeg exited with code ${exitCode}`) : null;
     }
     this.opts.log(`ffmpeg exited with code ${exitCode} (${this.state})`);
+    if (exitCode !== 0) this.opts.log(`last ffmpeg output: ${this.logTail.join(' | ')}`);
     this.emit();
   }
 

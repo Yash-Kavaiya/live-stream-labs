@@ -35,9 +35,7 @@ export function authRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post('/api/auth/signup', async (req, reply) => {
     const input = parse(signupSchema, req.body);
-    const [existing] = await db.select().from(users).where(eq(users.email, input.email));
-    if (existing) throw new HttpError(409, 'email_taken', 'An account with this email already exists');
-
+    // The unique index decides, so two simultaneous sign-ups cannot both succeed.
     const [user] = await db
       .insert(users)
       .values({
@@ -46,9 +44,11 @@ export function authRoutes(app: FastifyInstance, deps: Deps): void {
         name: input.name,
         passwordHash: await hashPassword(input.password),
       })
+      .onConflictDoNothing({ target: users.email })
       .returning();
-    await startSession(deps, reply, user!.id);
-    return toUserDto(user!);
+    if (!user) throw new HttpError(409, 'email_taken', 'An account with this email already exists');
+    await startSession(deps, reply, user.id);
+    return toUserDto(user);
   });
 
   app.post('/api/auth/login', async (req, reply) => {

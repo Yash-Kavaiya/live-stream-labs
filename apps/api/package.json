@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsup src/index.ts --format esm --target node22 --clean --no-external @studio/shared",
+    "build": "tsup",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate"
   },

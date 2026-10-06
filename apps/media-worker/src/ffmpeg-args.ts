@@ -50,7 +50,11 @@ export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = D
   return [
     '-hide_banner',
     '-loglevel', 'info',
-    '-fflags', '+genpts',
+    '-fflags', '+genpts+nobuffer',
+    // A live pipe: take the codec parameters from the container header instead of waiting for
+    // megabytes of data. A quiet scene sends so little that default probing can take a minute.
+    '-probesize', '64k',
+    '-analyzeduration', '0',
     '-i', 'pipe:0',
 
     '-map', '0:v:0',

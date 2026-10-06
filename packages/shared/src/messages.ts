@@ -37,7 +37,7 @@ export const egressJobSchema = z.object({
 });
 export type EgressJob = z.infer<typeof egressJobSchema>;
 
-export function encodeJson(value: unknown): Uint8Array {
+export function encodeJson(value: unknown) {
   return new TextEncoder().encode(JSON.stringify(value));
 }
 

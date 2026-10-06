@@ -1,0 +1,172 @@
+/*
+ * Material Design 3 system tokens. @material/web components read the --md-sys-* and --md-ref-*
+ * variables directly, so this one file themes both the library and our own CSS.
+ * Theme: follows the OS unless <html data-theme="light|dark"> pins it.
+ */
+:root {
+  color-scheme: light dark;
+
+  --md-ref-typeface-brand: 'Google Sans Flex', 'Google Sans', 'Roboto Flex', Roboto, system-ui, sans-serif;
+  --md-ref-typeface-plain: 'Google Sans Flex', 'Google Sans', 'Roboto Flex', Roboto, system-ui, sans-serif;
+  --app-font-mono: 'Roboto Mono', ui-monospace, 'Cascadia Mono', monospace;
+  /* Material Web defaults to the Outlined set; we load Rounded. */
+  --md-icon-font: 'Material Symbols Rounded';
+
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 999px;
+
+  --app-elevation-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --app-elevation-2: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --app-elevation-3: 0 4px 8px 3px rgb(0 0 0 / 0.15), 0 1px 3px rgb(0 0 0 / 0.3);
+
+  --app-motion-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root,
+:root[data-theme='light'] {
+  --md-sys-color-primary: #0b57d0;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #d3e3fd;
+  --md-sys-color-on-primary-container: #041e49;
+  --md-sys-color-secondary: #00639b;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #c2e7ff;
+  --md-sys-color-on-secondary-container: #001d35;
+  --md-sys-color-tertiary: #146c2e;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #c4eed0;
+  --md-sys-color-on-tertiary-container: #072711;
+  --md-sys-color-error: #b3261e;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #f9dedc;
+  --md-sys-color-on-error-container: #410e0b;
+  --md-sys-color-background: #ffffff;
+  --md-sys-color-on-background: #1f1f1f;
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-on-surface: #1f1f1f;
+  --md-sys-color-surface-variant: #e1e3e1;
+  --md-sys-color-on-surface-variant: #444746;
+  --md-sys-color-outline: #747775;
+  --md-sys-color-outline-variant: #c4c7c5;
+  --md-sys-color-surface-dim: #d3dbe5;
+  --md-sys-color-surface-bright: #ffffff;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #f8fafd;
+  --md-sys-color-surface-container: #f0f4f9;
+  --md-sys-color-surface-container-high: #e9eef6;
+  --md-sys-color-surface-container-highest: #dde3ea;
+  --md-sys-color-inverse-surface: #303030;
+  --md-sys-color-inverse-on-surface: #f2f2f2;
+  --md-sys-color-inverse-primary: #a8c7fa;
+  --md-sys-color-scrim: #000000;
+  --md-sys-color-shadow: #000000;
+
+  /* App-specific roles that M3 has no slot for. */
+  --app-live: #d93025;
+  --app-on-live: #ffffff;
+  --app-success: #188038;
+  --app-warning: #b06000;
+}
+
+:root[data-theme='dark'] {
+  --md-sys-color-primary: #a8c7fa;
+  --md-sys-color-on-primary: #062e6f;
+  --md-sys-color-primary-container: #0842a0;
+  --md-sys-color-on-primary-container: #d3e3fd;
+  --md-sys-color-secondary: #7fcfff;
+  --md-sys-color-on-secondary: #003355;
+  --md-sys-color-secondary-container: #004a77;
+  --md-sys-color-on-secondary-container: #c2e7ff;
+  --md-sys-color-tertiary: #6dd58c;
+  --md-sys-color-on-tertiary: #0a3818;
+  --md-sys-color-tertiary-container: #0f5223;
+  --md-sys-color-on-tertiary-container: #c4eed0;
+  --md-sys-color-error: #f2b8b5;
+  --md-sys-color-on-error: #601410;
+  --md-sys-color-error-container: #8c1d18;
+  --md-sys-color-on-error-container: #f9dedc;
+  --md-sys-color-background: #131314;
+  --md-sys-color-on-background: #e3e3e3;
+  --md-sys-color-surface: #131314;
+  --md-sys-color-on-surface: #e3e3e3;
+  --md-sys-color-surface-variant: #444746;
+  --md-sys-color-on-surface-variant: #c4c7c5;
+  --md-sys-color-outline: #8e918f;
+  --md-sys-color-outline-variant: #444746;
+  --md-sys-color-surface-dim: #131314;
+  --md-sys-color-surface-bright: #37393b;
+  --md-sys-color-surface-container-lowest: #0e0e0e;
+  --md-sys-color-surface-container-low: #1b1b1b;
+  --md-sys-color-surface-container: #1e1f20;
+  --md-sys-color-surface-container-high: #282a2c;
+  --md-sys-color-surface-container-highest: #333537;
+  --md-sys-color-inverse-surface: #e3e3e3;
+  --md-sys-color-inverse-on-surface: #303030;
+  --md-sys-color-inverse-primary: #0b57d0;
+
+  --app-live: #f28b82;
+  --app-on-live: #410e0b;
+  --app-success: #81c995;
+  --app-warning: #fdd663;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --md-sys-color-primary: #a8c7fa;
+    --md-sys-color-on-primary: #062e6f;
+    --md-sys-color-primary-container: #0842a0;
+    --md-sys-color-on-primary-container: #d3e3fd;
+    --md-sys-color-secondary: #7fcfff;
+    --md-sys-color-on-secondary: #003355;
+    --md-sys-color-secondary-container: #004a77;
+    --md-sys-color-on-secondary-container: #c2e7ff;
+    --md-sys-color-tertiary: #6dd58c;
+    --md-sys-color-on-tertiary: #0a3818;
+    --md-sys-color-tertiary-container: #0f5223;
+    --md-sys-color-on-tertiary-container: #c4eed0;
+    --md-sys-color-error: #f2b8b5;
+    --md-sys-color-on-error: #601410;
+    --md-sys-color-error-container: #8c1d18;
+    --md-sys-color-on-error-container: #f9dedc;
+    --md-sys-color-background: #131314;
+    --md-sys-color-on-background: #e3e3e3;
+    --md-sys-color-surface: #131314;
+    --md-sys-color-on-surface: #e3e3e3;
+    --md-sys-color-surface-variant: #444746;
+    --md-sys-color-on-surface-variant: #c4c7c5;
+    --md-sys-color-outline: #8e918f;
+    --md-sys-color-outline-variant: #444746;
+    --md-sys-color-surface-dim: #131314;
+    --md-sys-color-surface-bright: #37393b;
+    --md-sys-color-surface-container-lowest: #0e0e0e;
+    --md-sys-color-surface-container-low: #1b1b1b;
+    --md-sys-color-surface-container: #1e1f20;
+    --md-sys-color-surface-container-high: #282a2c;
+    --md-sys-color-surface-container-highest: #333537;
+    --md-sys-color-inverse-surface: #e3e3e3;
+    --md-sys-color-inverse-on-surface: #303030;
+    --md-sys-color-inverse-primary: #0b57d0;
+
+    --app-live: #f28b82;
+    --app-on-live: #410e0b;
+    --app-success: #81c995;
+    --app-warning: #fdd663;
+  }
+}
+
+/* M3 type scale as utility classes. */
+.display { font: 400 clamp(2.25rem, 5vw, 3.5rem) / 1.12 var(--md-ref-typeface-brand); letter-spacing: -0.01em; }
+.headline { font: 400 1.75rem/2.25rem var(--md-ref-typeface-brand); }
+.title-large { font: 400 1.375rem/1.75rem var(--md-ref-typeface-brand); }
+.title-medium { font: 500 1rem/1.5rem var(--md-ref-typeface-plain); letter-spacing: 0.009em; }
+.title-small { font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.007em; }
+.body-large { font: 400 1rem/1.5rem var(--md-ref-typeface-plain); }
+.body-medium { font: 400 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.016em; }
+.body-small { font: 400 0.75rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.025em; }
+.label-large { font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.007em; }
+.label-medium { font: 500 0.75rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.03em; }
+.muted { color: var(--md-sys-color-on-surface-variant); }
