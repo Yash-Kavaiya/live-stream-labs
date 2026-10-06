@@ -1,0 +1,20 @@
+{
+  "name": "@studio/media-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsup src/index.ts --format esm --target node22 --clean --no-external @studio/shared",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@studio/shared": "*",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.0"
+  }
+}
