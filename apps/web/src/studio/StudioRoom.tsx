@@ -14,15 +14,16 @@ import { api } from '../lib/api';
 import { useAuth, useLoad, useToast } from '../lib/app-context';
 import { formatDuration } from '../lib/format';
 import { DestinationsDialog, InviteDialog, PlatformBadge, SettingsDialog } from './dialogs';
-import { shareVideoClip, useComments, useElapsed, useSceneController } from './hooks';
-import { BannersPanel, BrandPanel, ChatPanel, CommentsPanel } from './panels';
+import { shareVideoClip, useAutoDirector, useComments, useElapsed, useSceneController } from './hooks';
+import { BannersPanel, BrandPanel, ChatPanel, CommentsPanel, ScenesPanel } from './panels';
 import { LayoutPicker, ProgramCanvas, SourceTile } from './stage';
 import { useLiveControl } from './useLiveControl';
 import { useDrawableSources, useStudioRoom, type JoinOptions } from './useStudioRoom';
 
-type PanelId = 'comments' | 'banners' | 'brand' | 'chat';
+type PanelId = 'scenes' | 'comments' | 'banners' | 'brand' | 'chat';
 
 const HOST_TABS: { id: PanelId; label: string; icon: string }[] = [
+  { id: 'scenes', label: 'Scenes', icon: 'dashboard_customize' },
   { id: 'comments', label: 'Comments', icon: 'forum' },
   { id: 'banners', label: 'Banners', icon: 'call_to_action' },
   { id: 'brand', label: 'Brand', icon: 'palette' },
@@ -74,7 +75,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
   const comments = useComments(broadcast.data, live.phase === 'live');
   const elapsed = useElapsed(live.startedAt);
 
-  const [panel, setPanel] = useState<PanelId>(isHost ? 'comments' : 'chat');
+  const [panel, setPanel] = useState<PanelId>(isHost ? 'scenes' : 'chat');
   const [dialog, setDialog] = useState<'invite' | 'destinations' | 'settings' | null>(null);
   const stopClip = useRef<(() => void) | null>(null);
 
@@ -89,6 +90,8 @@ export function StudioRoom({ session, join, onExit }: Props) {
     seeded.current = true;
     if (hostScene.stage.length === 0) updateScene((s) => addToStage(s, sourceId('cam', session.identity)));
   }, [isHost, studio.status, hostScene.stage.length, session.identity, updateScene]);
+
+  useAutoDirector(hostScene, updateScene, view.sources, isHost && studio.status === 'connected');
 
   // Take sources off the stage once they are gone (guest left, screen share stopped). The delay
   // rides out the moment after connecting when remote tracks are not listed yet.
@@ -324,6 +327,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
         <aside className="studio-side">
           {isHost ? <Tabs<PanelId> tabs={HOST_TABS} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
           <div className="studio-panel">
+            {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} />}
             {panel === 'comments' && <CommentsPanel comments={comments} scene={scene} update={updateScene} />}
             {panel === 'banners' && <BannersPanel scene={scene} update={updateScene} />}
             {panel === 'brand' && <BrandPanel broadcastId={broadcastId} scene={scene} update={updateScene} />}

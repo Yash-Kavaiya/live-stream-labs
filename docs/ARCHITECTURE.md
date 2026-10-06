@@ -41,6 +41,17 @@ The host preview, the guest view and the server-side `/render` page all use it, 
 show different pictures. It is driven by a Worker timer, because browsers pause
 `requestAnimationFrame` in background tabs.
 
+**Motion lives in the compositor, not in the scene.** The scene only ever holds the target state
+("grid, these three people, this banner"). `TileAnimator` and `Fade`
+(`packages/shared/src/animate.ts`) ease from what is on screen to that target every frame, so
+any change, whoever makes it, animates the same way on every client and in the stream.
+
+**The auto director is ordinary scene updates.** `useAutoDirector` (host only) watches the room
+and edits the scene: it stages joining guests up to `auto.maxOnStage`, re-picks the layout with
+`pickAutoLayout` when the stage changes, and promotes the active speaker. Because it writes the
+same scene the host edits by hand, a manual choice always wins until the stage next changes.
+Templates and holding screens are scene fields too (`template`, `screen`, `scoreboard`).
+
 **Egress is an interface with two implementations** (`apps/api/src/egress/providers.ts`):
 
 - `relay` (default). The host's browser records the canvas and the audio mix with MediaRecorder

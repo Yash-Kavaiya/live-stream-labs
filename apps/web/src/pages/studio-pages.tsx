@@ -1,4 +1,4 @@
-import { sceneSchema, DEFAULT_SCENE, type Scene, type StudioSession } from '@studio/shared';
+import { DEFAULT_SCENE, normalizeScene, type Scene, type StudioSession } from '@studio/shared';
 import { Icon, Spinner } from '@studio/ui';
 import { Room, RoomEvent, type RemoteTrack } from 'livekit-client';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -105,8 +105,7 @@ export function RenderPage() {
     const next = new Room({ adaptiveStream: false });
     const readScene = (metadata: string | undefined) => {
       try {
-        const parsed = sceneSchema.safeParse(JSON.parse(metadata || 'null'));
-        if (parsed.success) setScene(parsed.data);
+        setScene((current) => normalizeScene(JSON.parse(metadata || 'null'), current));
       } catch {
         // Keep the previous scene.
       }
@@ -139,7 +138,7 @@ export function RenderPage() {
   // Only what is on stage is audible to viewers.
   const playing = useRef(new Map<MediaStreamTrack, HTMLAudioElement>());
   useEffect(() => {
-    const onStage = new Set(scene.stage);
+    const onStage = new Set(scene.screen === 'live' ? scene.stage : []);
     const wanted = new Set(view.sources.filter((s) => onStage.has(s.id)).flatMap((s) => s.audio));
     for (const [track, el] of playing.current) {
       if (wanted.has(track)) continue;
@@ -154,7 +153,7 @@ export function RenderPage() {
       document.body.append(el);
       playing.current.set(track, el);
     }
-  }, [scene.stage, view.sources]);
+  }, [scene.stage, scene.screen, view.sources]);
 
   if (!url || !token) return <Centered>This page is opened by the streaming server.</Centered>;
   return (

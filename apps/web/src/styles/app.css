@@ -206,6 +206,24 @@
   .studio-top { flex-wrap: wrap; }
 }
 
+/* Five tabs share the side panel. */
+.studio-side md-primary-tab { min-width: 0; }
+
+.screen-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.screen-button { display: grid; justify-items: center; gap: 4px; padding: 10px 2px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; transition: background 0.2s var(--app-motion-standard); }
+.screen-button:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); }
+.screen-button[aria-pressed='true'] { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.screen-button:focus-visible, .template-card:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
+.template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.template-card { display: flex; flex-direction: column; gap: 6px; padding: 6px 6px 8px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; text-align: left; transition: background 0.2s var(--app-motion-standard), border-color 0.2s var(--app-motion-standard); }
+.template-card:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); }
+.template-card[aria-pressed='true'] { border-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.template-card .label-large { padding-inline: 4px; }
+.template-swatch { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: var(--md-sys-shape-corner-small); overflow: hidden; }
+.template-accent { position: absolute; left: 8%; bottom: 12%; width: 46%; height: 16%; border-radius: 3px; }
+.scoreboard-fields { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; }
+
 /* ---------- Server-side render target ---------- */
 
 .render-page { position: fixed; inset: 0; background: #000; }

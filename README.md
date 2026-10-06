@@ -33,6 +33,12 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 
 - **Stage and backstage.** Everyone joins backstage; the host adds sources to the stage.
 - **Layouts.** Solo, grid, spotlight, picture in picture, screen + sidebar, cinema.
+- **Smooth transitions.** Tiles glide between layouts; people, banners, comments and holding
+  screens fade in and out.
+- **Auto director.** Guests go on stage as they join (up to a number you set, 3 by default), the
+  layout re-arranges itself, the speaker is highlighted, and optionally moved to the main spot.
+- **Templates.** News room, Sports and Cricket (with an editable scoreboard), Watch party.
+- **Holding screens.** Starting soon, Be right back, Thanks for watching. They mute the stream.
 - **Guests.** Invite link, no account; camera and microphone check before joining. The host can
   mute or remove a guest.
 - **Sharing.** Screen with audio, an image, or a video clip.

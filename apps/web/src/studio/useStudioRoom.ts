@@ -3,7 +3,7 @@ import {
   decodeJson,
   egressStatusSchema,
   encodeJson,
-  sceneSchema,
+  normalizeScene,
   TOPIC_CHAT,
   TOPIC_EGRESS,
   type EgressStatus,
@@ -66,8 +66,7 @@ function mediaSink(): HTMLElement {
 
 function parseScene(metadata: string | undefined, fallback: Scene): Scene {
   try {
-    const parsed = sceneSchema.safeParse(JSON.parse(metadata || 'null'));
-    return parsed.success ? parsed.data : fallback;
+    return normalizeScene(JSON.parse(metadata || 'null'), fallback);
   } catch {
     return fallback;
   }
@@ -217,7 +216,7 @@ export function useDrawableSources(sources: StudioSource[]): Map<string, Drawabl
           elements.current.set(source.video, frame);
         }
       }
-      map.set(source.id, { label: source.label, frame });
+      map.set(source.id, { label: source.label, frame, speaking: source.speaking });
     }
     for (const [track, el] of elements.current) {
       if (live.has(track)) continue;

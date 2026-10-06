@@ -1,6 +1,14 @@
 import {
   activeBanner,
+  applyTemplate,
+  MAX_ON_STAGE,
   PLATFORMS,
+  SCREEN_IDS,
+  TEMPLATE_IDS,
+  TEMPLATES,
+  type AutoDirector,
+  type Scoreboard,
+  type ScreenId,
   type Banner,
   type CommentDto,
   type OnScreenComment,
@@ -249,6 +257,130 @@ export function ChatPanel({ chat, onSend }: { chat: ChatEntry[]; onSend(text: st
         <TextField label="Message" value={text} onValue={setText} onEnter={send} maxLength={1000} data-testid="chat-input" />
         <IconButton icon="send" label="Send" variant="filled" disabled={!text.trim()} onClick={send} />
       </div>
+    </div>
+  );
+}
+
+// ---------- Scenes: holding screens, templates, scoreboard, auto director ----------
+
+const SCREEN_BUTTONS: Record<ScreenId, { label: string; icon: string }> = {
+  live: { label: 'Live', icon: 'videocam' },
+  starting: { label: 'Starting', icon: 'hourglass_top' },
+  brb: { label: 'BRB', icon: 'coffee' },
+  ending: { label: 'Ending', icon: 'waving_hand' },
+};
+
+const SCOREBOARD_LABELS: Record<'sports' | 'cricket', Record<keyof Scoreboard, string>> = {
+  sports: { teamA: 'Home team', scoreA: 'Home score', teamB: 'Away team', scoreB: 'Away score', info: 'Period or clock' },
+  cricket: { teamA: 'Batting team', scoreA: 'Runs / wickets', teamB: 'Bowling team', scoreB: 'Their score', info: 'Overs, target, run rate' },
+};
+
+const SCOREBOARD_FIELDS: (keyof Scoreboard)[] = ['teamA', 'scoreA', 'teamB', 'scoreB', 'info'];
+
+export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpdater }) {
+  const template = TEMPLATES[scene.template];
+  const setAuto = (patch: Partial<AutoDirector>) => update((s) => ({ ...s, auto: { ...s.auto, ...patch } }));
+  const stepMax = (by: number) =>
+    setAuto({ maxOnStage: Math.min(MAX_ON_STAGE, Math.max(1, scene.auto.maxOnStage + by)) });
+  const scoreLabels = scene.template === 'cricket' ? SCOREBOARD_LABELS.cricket : SCOREBOARD_LABELS.sports;
+
+  return (
+    <div className="panel-scroll col" style={{ gap: 24 }}>
+      <section className="col">
+        <h3 className="title-small">On screen now</h3>
+        <div className="screen-grid" role="group" aria-label="Screen">
+          {SCREEN_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="screen-button"
+              aria-pressed={scene.screen === id}
+              data-testid={`screen-${id}`}
+              onClick={() => update((s) => ({ ...s, screen: id }))}
+            >
+              <Icon name={SCREEN_BUTTONS[id].icon} />
+              <span className="label-medium">{SCREEN_BUTTONS[id].label}</span>
+            </button>
+          ))}
+        </div>
+        <TextField
+          label="Message on the holding screen"
+          value={scene.screenMessage}
+          onValue={(screenMessage) => update((s) => ({ ...s, screenMessage }))}
+          maxLength={80}
+          placeholder="We start at 6 pm"
+        />
+        <p className="body-small muted">
+          Starting, BRB and Ending cover the stage and mute everyone for viewers. You can still talk
+          to your guests.
+        </p>
+      </section>
+
+      <section className="col">
+        <h3 className="title-small">Template</h3>
+        <div className="template-grid">
+          {TEMPLATE_IDS.map((id) => {
+            const info = TEMPLATES[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                className="template-card"
+                aria-pressed={scene.template === id}
+                data-testid={`template-${id}`}
+                title={info.description}
+                onClick={() => update((s) => applyTemplate(s, id))}
+              >
+                <span
+                  className="template-swatch"
+                  style={{ background: `linear-gradient(160deg, ${info.backdrop[0]}, ${info.backdrop[1]})` }}
+                >
+                  <span className="template-accent" style={{ background: info.accent }} />
+                </span>
+                <span className="label-large">{info.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="body-small muted">{template.description}</p>
+      </section>
+
+      {template.scoreboard && scene.scoreboard && (
+        <section className="col">
+          <h3 className="title-small">Scoreboard</h3>
+          <div className="scoreboard-fields">
+            {SCOREBOARD_FIELDS.map((field) => (
+              <TextField
+                key={field}
+                label={scoreLabels[field]}
+                value={scene.scoreboard![field]}
+                onValue={(value) => update((s) => (s.scoreboard ? { ...s, scoreboard: { ...s.scoreboard, [field]: value } } : s))}
+                maxLength={field === 'info' ? 60 : field.startsWith('team') ? 24 : 12}
+                style={field === 'info' ? { gridColumn: '1 / -1' } : undefined}
+                data-testid={`score-${field}`}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="col">
+        <h3 className="title-small">Auto director</h3>
+        <Switch label="Put guests on stage when they join" selected={scene.auto.addGuests} onChange={(addGuests) => setAuto({ addGuests })} />
+        <div className="row" style={{ justifyContent: 'space-between', opacity: scene.auto.addGuests ? 1 : 0.5 }}>
+          <span className="body-large">Up to this many people</span>
+          <span className="row" style={{ gap: 4 }}>
+            <IconButton icon="remove" label="Fewer people on stage" disabled={!scene.auto.addGuests || scene.auto.maxOnStage <= 1} onClick={() => stepMax(-1)} />
+            <span className="title-medium" style={{ minWidth: 24, textAlign: 'center' }} data-testid="max-on-stage">
+              {scene.auto.maxOnStage}
+            </span>
+            <IconButton icon="add" label="More people on stage" disabled={!scene.auto.addGuests || scene.auto.maxOnStage >= MAX_ON_STAGE} onClick={() => stepMax(1)} />
+          </span>
+        </div>
+        <Switch label="Arrange the layout automatically" selected={scene.auto.layout} onChange={(layout) => setAuto({ layout })} />
+        <Switch label="Highlight who is speaking" selected={scene.auto.highlightSpeaker} onChange={(highlightSpeaker) => setAuto({ highlightSpeaker })} />
+        <Switch label="Move the speaker to the main spot" selected={scene.auto.followSpeaker} onChange={(followSpeaker) => setAuto({ followSpeaker })} />
+      </section>
     </div>
   );
 }

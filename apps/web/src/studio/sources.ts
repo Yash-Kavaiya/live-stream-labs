@@ -28,6 +28,8 @@ export interface StudioSource {
   video: Track | null;
   /** Audio that goes into the program mix while this source is on stage. */
   audio: MediaStreamTrack[];
+  /** True for a camera whose participant is talking right now. */
+  speaking: boolean;
 }
 
 function roleOf(participant: Participant): StudioRole {
@@ -88,7 +90,7 @@ export function readRoom(room: Room): RoomView {
       cameraOff: !isOn(camera),
     });
 
-    const base = { identity: p.identity, isLocal };
+    const base = { identity: p.identity, isLocal, speaking: false };
     sources.push({
       ...base,
       id: sourceId('cam', p.identity),
@@ -96,6 +98,7 @@ export function readRoom(room: Room): RoomView {
       label: name,
       video: trackOf(camera),
       audio: audioOf(mic),
+      speaking: p.isSpeaking && isOn(mic),
     });
     if (isOn(screen)) {
       sources.push({

@@ -2,6 +2,7 @@ import {
   createBroadcastSchema,
   DEFAULT_SCENE,
   joinInviteSchema,
+  normalizeScene,
   updateBroadcastSchema,
   updateSceneSchema,
   type InviteDto,
@@ -35,14 +36,16 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
     name: string,
   ): Promise<StudioSession> {
     const room = roomName(broadcast.id);
-    await livekit.ensureRoom(room, JSON.stringify(broadcast.scene));
+    // Scenes saved by an older version lack newer fields; fill them in before anyone reads it.
+    const scene = normalizeScene(broadcast.scene);
+    await livekit.ensureRoom(room, JSON.stringify(scene));
     return {
       role,
       identity,
       livekitUrl: config.livekit.url,
       token: await livekit.createToken({ room, identity, name, role }),
       broadcast: { id: broadcast.id, title: broadcast.title, status: broadcast.status },
-      scene: broadcast.scene,
+      scene,
     };
   }
 

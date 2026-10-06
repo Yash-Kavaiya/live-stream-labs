@@ -1,6 +1,6 @@
 // Starts the whole stack for local development, no Docker needed:
 // LiveKit (dev mode), a mock RTMP destination, the API, the media worker and the web app.
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureLiveKit } from './get-livekit.mjs';
@@ -28,7 +28,19 @@ let stopping = false;
 function shutdown(code = 0) {
   if (stopping) return;
   stopping = true;
-  for (const child of children) child.kill();
+  for (const child of children) {
+    // On Windows each service sits under a shell and an npx wrapper; kill() would stop only the
+    // shell and leave the real process holding its port.
+    if (process.platform === 'win32' && child.pid) {
+      try {
+        execFileSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore' });
+      } catch {
+        // Already gone.
+      }
+    } else {
+      child.kill();
+    }
+  }
   setTimeout(() => process.exit(code), 500);
 }
 process.on('SIGINT', () => shutdown(0));

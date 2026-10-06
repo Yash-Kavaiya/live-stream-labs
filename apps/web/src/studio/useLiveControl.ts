@@ -44,12 +44,13 @@ export function useLiveControl(opts: Options): LiveControl {
     setStartedAt(null);
   }, []);
 
-  // The program mix is the audio of whatever is on stage right now.
+  // The program mix is the audio of whatever is on stage right now. A holding screen
+  // (starting soon, be right back, ending) is silent: nobody should be heard behind it.
   useEffect(() => {
     if (!mixer.current) return;
-    const onStage = new Set(scene.stage);
+    const onStage = new Set(scene.screen === 'live' ? scene.stage : []);
     mixer.current.sync(sources.filter((s) => onStage.has(s.id)).flatMap((s) => s.audio));
-  }, [scene.stage, sources, phase]);
+  }, [scene.stage, scene.screen, sources, phase]);
 
   // The server says the stream is over (every destination dropped, or the worker stopped).
   useEffect(() => {

@@ -66,6 +66,47 @@ export const brandSchema = z.object({
 });
 export type Brand = z.infer<typeof brandSchema>;
 
+export const TEMPLATE_IDS = ['none', 'newsroom', 'sports', 'cricket', 'watchparty'] as const;
+export const templateIdSchema = z.enum(TEMPLATE_IDS);
+export type TemplateId = z.infer<typeof templateIdSchema>;
+
+/** `live` shows the stage; the others cover it with a full-frame holding card and mute the mix. */
+export const SCREEN_IDS = ['live', 'starting', 'brb', 'ending'] as const;
+export const screenIdSchema = z.enum(SCREEN_IDS);
+export type ScreenId = z.infer<typeof screenIdSchema>;
+
+/** Free-text on purpose: "2", "182/4" and "40-15" are all scores. */
+export const scoreboardSchema = z.object({
+  teamA: z.string().max(24),
+  teamB: z.string().max(24),
+  scoreA: z.string().max(12),
+  scoreB: z.string().max(12),
+  info: z.string().max(60),
+});
+export type Scoreboard = z.infer<typeof scoreboardSchema>;
+
+/** What the studio does by itself so the host does not have to direct every change. */
+export const autoSchema = z.object({
+  /** Put guests on stage as they join, until `maxOnStage` people are there. */
+  addGuests: z.boolean(),
+  maxOnStage: z.number().int().min(1).max(MAX_ON_STAGE),
+  /** Re-pick the layout whenever the set of sources on stage changes. */
+  layout: z.boolean(),
+  /** Move whoever is speaking into the main slot. */
+  followSpeaker: z.boolean(),
+  /** Ring around the tile of whoever is speaking. */
+  highlightSpeaker: z.boolean(),
+});
+export type AutoDirector = z.infer<typeof autoSchema>;
+
+export const DEFAULT_AUTO: AutoDirector = {
+  addGuests: true,
+  maxOnStage: 3,
+  layout: true,
+  followSpeaker: false,
+  highlightSpeaker: true,
+};
+
 export const sceneSchema = z.object({
   layout: layoutIdSchema,
   stage: z.array(sourceIdSchema).max(MAX_ON_STAGE),
@@ -74,6 +115,12 @@ export const sceneSchema = z.object({
   comment: commentSchema.nullable(),
   media: z.object({ url: assetUrl }).nullable(),
   brand: brandSchema,
+  // Added after the first release; defaults keep scenes saved before then valid.
+  template: templateIdSchema.default('none'),
+  screen: screenIdSchema.default('live'),
+  screenMessage: z.string().max(80).default(''),
+  scoreboard: scoreboardSchema.nullable().default(null),
+  auto: autoSchema.default(DEFAULT_AUTO),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -85,7 +132,18 @@ export const DEFAULT_SCENE: Scene = {
   comment: null,
   media: null,
   brand: { color: '#0B57D0', logoUrl: null, overlayUrl: null, backgroundUrl: null, showNames: true },
+  template: 'none',
+  screen: 'live',
+  screenMessage: '',
+  scoreboard: null,
+  auto: DEFAULT_AUTO,
 };
+
+/** Parses a stored or received scene, filling in fields that older scenes do not have. */
+export function normalizeScene(value: unknown, fallback: Scene = DEFAULT_SCENE): Scene {
+  const parsed = sceneSchema.safeParse(value);
+  return parsed.success ? parsed.data : fallback;
+}
 
 // --- Pure scene transitions. The studio applies these, then sends the result to the API. ---
 

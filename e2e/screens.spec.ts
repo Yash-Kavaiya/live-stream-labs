@@ -47,8 +47,25 @@ for (const theme of ['light', 'dark'] as const) {
     await shot('green-room');
     await page.getByTestId('enter-studio').click();
     await page.getByTestId('source-cam').waitFor();
-    await page.getByTestId('tab-brand').click();
     await page.waitForTimeout(2500);
     await shot('studio');
+
+    // Program output for each template and holding screen (the canvas only).
+    const program = (name: string) =>
+      page.getByTestId('program-canvas').screenshot({ path: `test-results/screens/program-${name}-${theme}.png` });
+    await page.getByTestId('tab-banners').click();
+    await field(page, 'banner-text').fill('Markets rally as rates hold steady');
+    await page.getByTestId('banner-add').click();
+    await page.getByTestId('banner-toggle').click();
+    await page.getByTestId('tab-scenes').click();
+    for (const template of ['newsroom', 'sports', 'cricket', 'watchparty']) {
+      await page.getByTestId(`template-${template}`).click();
+      await page.waitForTimeout(1200);
+      await program(template);
+    }
+    await page.getByTestId('screen-starting').click();
+    await page.waitForTimeout(1200);
+    await program('starting');
+    await shot('studio-scenes');
   });
 }

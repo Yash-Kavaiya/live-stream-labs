@@ -19,7 +19,13 @@ function codecs(url: string): string[] {
  */
 function showsCamera(page: Page): Promise<boolean> {
   return page.getByTestId('program-canvas').evaluate((canvas: HTMLCanvasElement) => {
-    const [r, g, b] = canvas.getContext('2d')!.getImageData(480, 300, 1, 1).data;
+    // Read the pixel through a scratch canvas. Reading the program canvas directly makes Chrome
+    // move it to software rendering, which slows the whole studio down for the rest of the test.
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 1;
+    const ctx = probe.getContext('2d')!;
+    ctx.drawImage(canvas, 480, 300, 1, 1, 0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
     return g! > r! + 40 && g! > b! + 40;
   });
 }
@@ -87,11 +93,24 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   // actionability checks, so each side is brought forward before it is driven.
   await page.bringToFront();
 
-  // --- Host brings the guest on stage and changes the layout ---
+  // --- Auto director, templates, layout ---
+  // The auto director puts the joining guest on stage and re-arranges the frame.
   const tiles = page.getByTestId('source-cam');
   await expect(tiles).toHaveCount(2);
-  await tiles.nth(1).getByTestId('toggle-stage').click();
   await expect(tiles.nth(1)).toHaveAttribute('data-on-stage', 'true');
+  await expect(page.getByTestId('layout-grid')).toHaveAttribute('aria-pressed', 'true');
+
+  // --- Template and holding screen ---
+  await page.getByTestId('template-newsroom').click();
+  await expect(page.getByTestId('template-newsroom')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('screen-starting').click();
+  // The holding screen fades in over the cameras, then back out.
+  await expect.poll(() => showsCamera(page)).toBe(false);
+  await page.screenshot({ path: 'test-results/studio-starting.png' });
+  await page.getByTestId('screen-live').click();
+  await expect.poll(() => showsCamera(page)).toBe(true);
+
+  // The host can still override the layout by hand.
   await page.getByTestId('layout-spotlight').click();
   await expect(page.getByTestId('layout-spotlight')).toHaveAttribute('aria-pressed', 'true');
 
@@ -119,7 +138,7 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await page.getByTestId('go-live').click();
   await expect(page.getByTestId('live-chip')).toBeVisible();
   for (const status of await page.getByTestId('destination-status').all()) {
-    await expect(status).toHaveAttribute('data-status', 'live', { timeout: 30_000 });
+    await expect(status).toHaveAttribute('data-status', 'live', { timeout: 90_000 });
   }
 
   // Both mock platforms really receive H.264 video and AAC audio.

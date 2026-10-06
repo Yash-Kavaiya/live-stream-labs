@@ -2,8 +2,9 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 120_000,
-  expect: { timeout: 20_000 },
+  // Generous: the test runs two browsers, an SFU and a video encoder on one machine.
+  timeout: 240_000,
+  expect: { timeout: 30_000 },
   workers: 1,
   reporter: [['list']],
   use: {
