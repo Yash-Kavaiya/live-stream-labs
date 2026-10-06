@@ -44,3 +44,9 @@ FROM caddy:2-alpine AS web
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/apps/web/dist /srv
 EXPOSE 80 443
+
+# The web app for Cloud Run: plain HTTP on $PORT, proxying to the other two services by URL.
+FROM caddy:2-alpine AS web-cloudrun
+COPY infra/Caddyfile.cloudrun /etc/caddy/Caddyfile
+COPY --from=build /app/apps/web/dist /srv
+EXPOSE 8080

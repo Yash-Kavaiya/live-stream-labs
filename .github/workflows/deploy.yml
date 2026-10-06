@@ -1,0 +1,132 @@
+# Checks the code, builds the three images and deploys them to Cloud Run.
+#
+# Started by hand (Actions → Deploy to Cloud Run → Run workflow), so nothing is created or
+# billed by an ordinary push. To deploy on every push to main, add `push: { branches: [main] }`
+# under `on:`.
+#
+# Google access uses Workload Identity Federation: the repository is allowed to act as the
+# deploy service account, and no key is stored in GitHub.
+#
+# Repository secrets needed (32+ random characters each):
+#   SESSION_SECRET, ENCRYPTION_KEY, INTERNAL_SECRET
+# Repository variables, optional:
+#   LIVEKIT_URL, plus secrets LIVEKIT_API_KEY and LIVEKIT_API_SECRET, for a real LiveKit server.
+#   Cloud Run cannot host LiveKit, and the studio room does not open without one.
+name: Deploy to Cloud Run
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: gen-ai-guru-gdg-pune
+  PROJECT_NUMBER: '443180956629'
+  REGION: asia-south1
+  REGISTRY: asia-south1-docker.pkg.dev/gen-ai-guru-gdg-pune/streamlabs
+  RUNTIME_SA: streamlabs-runtime@gen-ai-guru-gdg-pune.iam.gserviceaccount.com
+
+jobs:
+  check:
+    name: Typecheck, lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+  deploy:
+    name: Build and deploy
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/443180956629/locations/global/workloadIdentityPools/github/providers/live-stream-labs
+          service_account: streamlabs-deployer@gen-ai-guru-gdg-pune.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Let Docker push to Artifact Registry
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      # One build stage feeds all three images; the cache makes the second and third quick.
+      - name: Build and push images
+        run: |
+          for target in api worker web-cloudrun; do
+            name="${target%-cloudrun}"
+            docker buildx build . -f infra/Dockerfile --target "$target" \
+              --cache-from "type=gha,scope=studio" --cache-to "type=gha,scope=studio,mode=max" \
+              -t "$REGISTRY/$name:$GITHUB_SHA" --push
+          done
+
+      # A Cloud Run address is fixed by the service name, project number and region, so each
+      # service can be told where the others are before they exist.
+      - name: Work out the service addresses
+        run: |
+          {
+            echo "WEB_HOST=studio-web-$PROJECT_NUMBER.$REGION.run.app"
+            echo "API_HOST=studio-api-$PROJECT_NUMBER.$REGION.run.app"
+            echo "WORKER_HOST=studio-worker-$PROJECT_NUMBER.$REGION.run.app"
+          } >> "$GITHUB_ENV"
+
+      - name: Deploy the API
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
+          LIVEKIT_URL: ${{ vars.LIVEKIT_URL || 'ws://localhost:7880' }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY || 'devkey' }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET || 'secret' }}
+        # One instance, always on: without DATABASE_URL the API keeps its database in the
+        # container, so a second instance or a restart would mean a different, empty database.
+        run: |
+          gcloud run deploy studio-api --project "$PROJECT_ID" --region "$REGION" \
+            --image "$REGISTRY/api:$GITHUB_SHA" --service-account "$RUNTIME_SA" \
+            --port 4000 --memory 1Gi --cpu 1 --min-instances 1 --max-instances 1 --no-cpu-throttling \
+            --allow-unauthenticated --quiet \
+            --set-env-vars "^##^NODE_ENV=production##WEB_ORIGIN=https://$WEB_HOST##PUBLIC_INGEST_URL=wss://$WEB_HOST/ingest##DATA_DIR=/tmp/data##SESSION_SECRET=$SESSION_SECRET##ENCRYPTION_KEY=$ENCRYPTION_KEY##INTERNAL_SECRET=$INTERNAL_SECRET##LIVEKIT_URL=$LIVEKIT_URL##LIVEKIT_API_KEY=$LIVEKIT_API_KEY##LIVEKIT_API_SECRET=$LIVEKIT_API_SECRET"
+
+      - name: Deploy the media worker
+        env:
+          INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
+        # 3600 s is the longest request Cloud Run allows: a stream is cut after an hour.
+        run: |
+          gcloud run deploy studio-worker --project "$PROJECT_ID" --region "$REGION" \
+            --image "$REGISTRY/worker:$GITHUB_SHA" --service-account "$RUNTIME_SA" \
+            --port 4100 --memory 1Gi --cpu 2 --min-instances 0 --max-instances 2 --no-cpu-throttling \
+            --timeout 3600 --concurrency 1 --allow-unauthenticated --quiet \
+            --set-env-vars "^##^NODE_ENV=production##API_INTERNAL_URL=https://$API_HOST##DATA_DIR=/tmp/data##INTERNAL_SECRET=$INTERNAL_SECRET"
+
+      - name: Deploy the web app
+        run: |
+          gcloud run deploy studio-web --project "$PROJECT_ID" --region "$REGION" \
+            --image "$REGISTRY/web:$GITHUB_SHA" --service-account "$RUNTIME_SA" \
+            --port 8080 --memory 1Gi --cpu 1 --min-instances 0 --max-instances 3 \
+            --timeout 3600 --allow-unauthenticated --quiet \
+            --set-env-vars "API_UPSTREAM=https://$API_HOST,WORKER_UPSTREAM=https://$WORKER_HOST"
+
+      - name: Smoke test
+        run: |
+          set -e
+          curl -fsS "https://$API_HOST/healthz"
+          curl -fsS "https://$WORKER_HOST/healthz"
+          curl -fsS "https://$WEB_HOST/" | grep -q '<div id="root">'
+          curl -fsS "https://$WEB_HOST/api/config"
+          echo
+          echo "Deployed: https://$WEB_HOST" | tee -a "$GITHUB_STEP_SUMMARY"

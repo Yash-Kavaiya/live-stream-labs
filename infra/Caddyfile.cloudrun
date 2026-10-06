@@ -1,0 +1,33 @@
+# The web service on Cloud Run. Cloud Run terminates HTTPS and passes plain HTTP on $PORT, so
+# Caddy only serves the built app and keeps the API and the stream ingest on the same origin.
+# API_UPSTREAM and WORKER_UPSTREAM are the https URLs of the other two Cloud Run services.
+{
+	auto_https off
+	admin off
+}
+
+:{$PORT:8080} {
+	encode zstd gzip
+
+	@api path /api/* /assets/*
+	handle @api {
+		reverse_proxy {$API_UPSTREAM} {
+			# Cloud Run routes by Host, so each upstream must be asked for by its own name.
+			header_up Host {http.reverse_proxy.upstream.host}
+		}
+	}
+
+	# The host's program stream: a long-lived WebSocket. Cloud Run ends any request after
+	# 60 minutes, so a stream through this path is cut at the hour.
+	handle /ingest {
+		reverse_proxy {$WORKER_UPSTREAM} {
+			header_up Host {http.reverse_proxy.upstream.host}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
