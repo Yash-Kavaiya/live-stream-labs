@@ -210,6 +210,8 @@
 .studio-side md-primary-tab { min-width: 0; --md-primary-tab-label-text-size: 0.75rem; }
 
 .screen-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.banner-styles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.banner-styles .label-medium { text-align: center; line-height: 1.15; }
 .screen-button { display: grid; justify-items: center; gap: 4px; padding: 10px 2px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; transition: background 0.2s var(--app-motion-standard); }
 .screen-button:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); }
 .screen-button[aria-pressed='true'] { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }

@@ -53,7 +53,10 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 - **Guests.** Invite link, no account; camera and microphone check before joining. The host can
   mute or remove a guest.
 - **Sharing.** Screen with audio, an image, or a video clip.
-- **Brand.** Colour, logo, overlay, background, name tags, banners and a scrolling ticker.
+- **Brand.** Colour, logo, overlay, background and name tags.
+- **Banners.** Eight kinds: lower third, name + title, social handle, call to action, ticker, top
+  headline, corner badge and title card. Banners in different positions can show together, and
+  there are one-click presets.
 - **Chat.** Private studio chat; Twitch and YouTube comments that can be put on screen.
 - **Recording.** Every stream is recorded; watch, download or share a link.
 - **Themes.** Light, dark, or follow the system.

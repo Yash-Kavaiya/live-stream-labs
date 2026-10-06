@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { buildRtmpTarget, redactRtmpTarget } from './platforms';
 import {
+  activeBanners,
+  addBanner,
   addToStage,
+  bannerInSlot,
+  hideAllBanners,
+  removeBanner,
+  toggleBanner,
+  type Banner,
   DEFAULT_SCENE,
   MAX_ON_STAGE,
   moveOnStage,
@@ -42,6 +49,51 @@ describe('scene transitions', () => {
   it('parses source ids, including identities that contain colons', () => {
     expect(parseSourceId('screen:guest:42')).toEqual({ kind: 'screen', identity: 'guest:42' });
     expect(parseSourceId('media')).toEqual({ kind: 'media', identity: '' });
+  });
+});
+
+describe('banners', () => {
+  const banner = (id: string, style: Banner['style']): Banner => ({ id, text: id, subtitle: '', style });
+  const scene = [
+    banner('lower', 'lower-third'),
+    banner('guest', 'name-title'),
+    banner('news', 'ticker'),
+    banner('new', 'badge'),
+  ].reduce(addBanner, DEFAULT_SCENE);
+
+  it('shows banners from different slots together', () => {
+    const shown = ['lower', 'news', 'new'].reduce(toggleBanner, scene);
+    expect(activeBanners(shown).map((b) => b.id).sort()).toEqual(['lower', 'new', 'news']);
+    expect(bannerInSlot(shown, 'ticker')?.id).toBe('news');
+  });
+
+  it('replaces the banner already in the same slot', () => {
+    const shown = ['lower', 'guest'].reduce(toggleBanner, scene);
+    expect(activeBanners(shown).map((b) => b.id)).toEqual(['guest']);
+  });
+
+  it('hides a banner that is toggled again, and all of them at once', () => {
+    const shown = ['lower', 'news'].reduce(toggleBanner, scene);
+    expect(activeBanners(toggleBanner(shown, 'lower')).map((b) => b.id)).toEqual(['news']);
+    expect(activeBanners(hideAllBanners(shown))).toEqual([]);
+  });
+
+  it('forgets a deleted banner', () => {
+    const shown = toggleBanner(scene, 'lower');
+    const after = removeBanner(shown, 'lower');
+    expect(after.banners.map((b) => b.id)).not.toContain('lower');
+    expect(activeBanners(after)).toEqual([]);
+  });
+
+  it('still shows a banner saved by the older single-banner field', () => {
+    const old = { ...scene, activeBannerId: 'lower' };
+    expect(activeBanners(old).map((b) => b.id)).toEqual(['lower']);
+    expect(toggleBanner(old, 'lower')).toMatchObject({ activeBannerId: null, activeBannerIds: [] });
+  });
+
+  it('accepts a banner saved before subtitles existed', () => {
+    const parsed = sceneSchema.parse({ ...DEFAULT_SCENE, banners: [{ id: 'a', text: 'Hi', style: 'ticker' }] });
+    expect(parsed.banners[0]).toEqual({ id: 'a', text: 'Hi', subtitle: '', style: 'ticker' });
   });
 });
 

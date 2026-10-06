@@ -1,5 +1,5 @@
 import {
-  activeBanner,
+  bannerInSlot,
   computeSceneLayout,
   CRICKET_STRIP,
   Fade,
@@ -13,6 +13,7 @@ import {
   TileAnimator,
   type AnimatedTile,
   type Banner,
+  type BannerSlot,
   type OnScreenComment,
   type Scene,
   type ScreenId,
@@ -20,6 +21,7 @@ import {
   type TemplateId,
   type Tile,
 } from '@studio/shared';
+import { drawBadge, drawCta, drawHeadline, drawLowerThird, drawNameTitle, drawSocial, drawTicker, drawTitleCard } from './graphics/banners';
 import { CELEBRATION_MS, drawCelebration } from './graphics/celebration';
 import { drawCricketDashboard, drawCricketStrip } from './graphics/cricket';
 import { drawNews } from './graphics/news';
@@ -96,7 +98,14 @@ export class Compositor {
   private readonly size: Size;
   private readonly tiles = new TileAnimator();
   private readonly speakingRings = new Map<string, Fade>();
-  private readonly banner = new FadingOverlay<Banner>();
+  private readonly banners: Record<BannerSlot, FadingOverlay<Banner>> = {
+    bottom: new FadingOverlay(),
+    side: new FadingOverlay(),
+    ticker: new FadingOverlay(),
+    top: new FadingOverlay(),
+    corner: new FadingOverlay(),
+    center: new FadingOverlay(),
+  };
   private readonly comment = new FadingOverlay<OnScreenComment>();
   private readonly holding = new FadingOverlay<HoldingScreen>();
   private readonly themed = new FadingOverlay<TemplateId>();
@@ -167,9 +176,9 @@ export class Compositor {
     if (overlay) this.drawFrame(overlay, { x: 0, y: 0, ...size, fit: 'cover' });
 
     // In the news room a lower-third banner is the headline: it overrides the saved one.
-    const shown = activeBanner(scene);
+    const lowerThird = bannerInSlot(scene, 'bottom');
     const isNews = scene.template === 'newsroom';
-    const headlineText = isNews ? ((shown?.style === 'lower-third' ? shown.text : '') || scene.news.headline.trim()) : '';
+    const headlineText = isNews ? ((lowerThird?.style === 'lower-third' ? lowerThird.text : '') || scene.news.headline.trim()) : '';
     const headline = this.newsHeadline.step(headlineText || null, dt);
     if (themed) {
       this.withAlpha(themed.alpha, () =>
@@ -180,13 +189,7 @@ export class Compositor {
       );
     }
     this.drawLogo(scene);
-
-    // The news room shows a lower-third banner as its headline, and the cricket dashboard has no
-    // free space for one; a ticker still runs in both.
-    const fullFrame = isNews || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
-    const banner = this.banner.step(fullFrame && shown?.style === 'lower-third' ? null : shown, dt);
-    this.bannerZone = { top: Infinity, alpha: 0 };
-    if (banner) this.drawBanner(banner.value, banner.alpha, scene, now);
+    this.drawBanners(scene, dt, now);
     // Comments clear the news lower third.
     if (isNews) this.bottomInset = Math.max(this.bottomInset, this.unit * 22);
     const comment = this.comment.step(scene.comment, dt);
@@ -500,53 +503,40 @@ export class Compositor {
     this.ctx.drawImage(logo, size.width - w - unit * 3, unit * 3, w, h);
   }
 
-  private drawBanner(banner: Banner, alpha: number, scene: Scene, now: number): void {
-    const { ctx, unit, size } = this;
+  /** Draws the banner showing in each slot, fading the ones that were just switched off. */
+  private drawBanners(scene: Scene, dt: number, now: number): void {
+    const p = this.painter;
     const color = scene.brand.color;
-    const fontSize = unit * 4;
-    ctx.save();
-    ctx.font = `500 ${fontSize}px ${FONT}`;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
+    const { unit } = this;
+    // The news room and the cricket dashboard have no free space at the bottom for banners; the
+    // news room shows a lower third as its headline instead. Tickers and top banners still run.
+    const bottomTaken =
+      scene.template === 'newsroom' || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
+    // Templates with their own furniture along the top push top banners below it.
+    const topOffset = scene.template === 'newsroom' ? unit * 9 : scene.template === 'watchparty' ? unit * 6 : 0;
+    const slot = (name: BannerSlot, hidden = false) => this.banners[name].step(hidden ? null : bannerInSlot(scene, name), dt);
 
-    if (banner.style === 'ticker') {
-      const height = fontSize * 1.9;
-      // Slides up from below the frame.
-      const y = size.height - this.bottomInset - height * alpha;
-      ctx.fillStyle = color;
-      ctx.fillRect(0, y, size.width, height);
-      ctx.fillStyle = readableOn(color);
-      const text = `${banner.text}     •     `;
-      const textWidth = ctx.measureText(text).width;
-      const offset = ((now / 1000) * unit * 14) % textWidth;
-      ctx.beginPath();
-      ctx.rect(0, y, size.width, height);
-      ctx.clip();
-      for (let x = -offset; x < size.width; x += textWidth) ctx.fillText(text, x, y + height / 2);
-      ctx.restore();
-      this.bottomInset += height * alpha;
-      return;
+    this.bannerZone = { top: Infinity, alpha: 0 };
+    const ticker = slot('ticker');
+    if (ticker) this.bottomInset += drawTicker(p, ticker.value, ticker.alpha, color, now, this.bottomInset).used;
+
+    const side = slot('side', bottomTaken);
+    if (side) drawCta(p, side.value, side.alpha, color, now, this.bottomInset);
+
+    const bottom = slot('bottom', bottomTaken);
+    if (bottom) {
+      const draw = bottom.value.style === 'name-title' ? drawNameTitle : bottom.value.style === 'social' ? drawSocial : drawLowerThird;
+      const box = draw(p, bottom.value, bottom.alpha, color, this.bottomInset);
+      this.bannerZone = { top: box.top - unit, alpha: bottom.alpha };
+      this.bottomInset += box.used;
     }
 
-    ctx.globalAlpha *= alpha;
-    const slide = (1 - alpha) * unit * 4;
-    const height = fontSize * 2.1;
-    const y = size.height - height - unit * 6 - this.bottomInset + slide;
-    this.bannerZone = { top: y - unit, alpha };
-
-    const padX = fontSize * 0.9;
-    const maxWidth = size.width * 0.8;
-    const text = ellipsize(this.ctx, banner.text, maxWidth - padX * 2);
-    const width = Math.min(maxWidth, ctx.measureText(text).width + padX * 2);
-    const x = unit * 4;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, height, unit * 1.6);
-    ctx.fill();
-    ctx.fillStyle = readableOn(color);
-    ctx.fillText(text, x + padX, y + height / 2 + fontSize * 0.04);
-    ctx.restore();
-    this.bottomInset += (height + unit * 4) * alpha;
+    const top = slot('top');
+    if (top) drawHeadline(p, top.value, top.alpha, color, topOffset);
+    const corner = slot('corner');
+    if (corner) drawBadge(p, corner.value, corner.alpha, color, now, topOffset + (top ? unit * 14 * top.alpha : 0));
+    const center = slot('center');
+    if (center) drawTitleCard(p, center.value, center.alpha, color);
   }
 
   private drawComment(comment: OnScreenComment, alpha: number, scene: Scene): void {

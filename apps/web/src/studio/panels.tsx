@@ -1,5 +1,4 @@
 import {
-  activeBanner,
   applyTemplate,
   MAX_ON_STAGE,
   PLATFORMS,
@@ -10,7 +9,6 @@ import {
   TEMPLATES,
   type AutoDirector,
   type ScreenId,
-  type Banner,
   type CommentDto,
   type OnScreenComment,
   type PlatformId,
@@ -88,74 +86,6 @@ export function CommentsPanel({
             </span>
             <span className="body-medium">{comment.text}</span>
           </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------- Banners ----------
-
-export function BannersPanel({ scene, update }: { scene: Scene; update: SceneUpdater }) {
-  const [text, setText] = useState('');
-  const [style, setStyle] = useState<Banner['style']>('lower-third');
-  const active = activeBanner(scene);
-
-  const add = () => {
-    const value = text.trim();
-    if (!value) return;
-    const banner: Banner = { id: crypto.randomUUID().slice(0, 8), text: value, style };
-    update((s) => ({ ...s, banners: [...s.banners, banner].slice(-30) }));
-    setText('');
-  };
-
-  return (
-    <div className="panel-scroll col">
-      <TextField label="Banner text" value={text} onValue={setText} maxLength={200} onEnter={add} data-testid="banner-text" />
-      <div className="row">
-        <div className="segmented grow" role="group" aria-label="Banner style">
-          <button type="button" aria-pressed={style === 'lower-third'} onClick={() => setStyle('lower-third')}>
-            <Icon name="call_to_action" /> Banner
-          </button>
-          <button type="button" aria-pressed={style === 'ticker'} onClick={() => setStyle('ticker')}>
-            <Icon name="text_rotation_none" /> Ticker
-          </button>
-        </div>
-        <Button variant="tonal" icon="add" onClick={add} disabled={!text.trim()} data-testid="banner-add">
-          Add
-        </Button>
-      </div>
-
-      {scene.banners.length === 0 && (
-        <p className="body-medium muted">Banners sit over the video. Add one, then click it to show or hide it.</p>
-      )}
-      {scene.banners.map((banner) => {
-        const shown = active?.id === banner.id;
-        return (
-          <div key={banner.id} className={`banner-item ${shown ? 'shown' : ''}`}>
-            <button
-              type="button"
-              className="banner-toggle"
-              aria-pressed={shown}
-              data-testid="banner-toggle"
-              onClick={() => update((s) => ({ ...s, activeBannerId: shown ? null : banner.id }))}
-            >
-              <Icon name={banner.style === 'ticker' ? 'text_rotation_none' : 'call_to_action'} />
-              <span className="body-medium grow">{banner.text}</span>
-              {shown && <span className="chip primary">Showing</span>}
-            </button>
-            <IconButton
-              icon="delete"
-              label="Delete banner"
-              onClick={() =>
-                update((s) => ({
-                  ...s,
-                  banners: s.banners.filter((b) => b.id !== banner.id),
-                  activeBannerId: s.activeBannerId === banner.id ? null : s.activeBannerId,
-                }))
-              }
-            />
-          </div>
         );
       })}
     </div>

@@ -58,10 +58,49 @@ const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 /** Assets are uploaded to the API first, so scene URLs are always same-origin paths. */
 const assetUrl = z.string().max(300).startsWith('/assets/');
 
+/**
+ * Banners sit in slots. One banner per slot can show at a time, so a lower third, a ticker and a
+ * corner badge can all be up together, but two lower thirds cannot.
+ */
+export type BannerSlot = 'bottom' | 'side' | 'ticker' | 'top' | 'corner' | 'center';
+
+export const BANNER_STYLES = [
+  'lower-third',
+  'name-title',
+  'social',
+  'cta',
+  'ticker',
+  'headline',
+  'badge',
+  'title',
+] as const;
+export type BannerStyle = (typeof BANNER_STYLES)[number];
+
+export interface BannerStyleInfo {
+  label: string;
+  slot: BannerSlot;
+  icon: string;
+  hint: string;
+  /** Label of the second text field, or null when the style has only one line. */
+  subtitle: string | null;
+}
+
+export const BANNER_STYLE_INFO: Record<BannerStyle, BannerStyleInfo> = {
+  'lower-third': { label: 'Lower third', slot: 'bottom', icon: 'call_to_action', hint: 'One line, bottom left.', subtitle: null },
+  'name-title': { label: 'Name + title', slot: 'bottom', icon: 'badge', hint: 'Introduce a guest: name and role.', subtitle: 'Title or role' },
+  social: { label: 'Social handle', slot: 'bottom', icon: 'alternate_email', hint: 'Your @handle and where to find it.', subtitle: 'Platform or note' },
+  cta: { label: 'Call to action', slot: 'side', icon: 'ads_click', hint: 'A pulsing button, bottom right.', subtitle: 'Line above (optional)' },
+  ticker: { label: 'Ticker', slot: 'ticker', icon: 'text_rotation_none', hint: 'Scrolling text along the bottom.', subtitle: null },
+  headline: { label: 'Top headline', slot: 'top', icon: 'title', hint: 'A bar across the top: the topic of the show.', subtitle: 'Second line (optional)' },
+  badge: { label: 'Corner badge', slot: 'corner', icon: 'new_releases', hint: 'A small label, top left: NEW, LIVE Q&A.', subtitle: null },
+  title: { label: 'Title card', slot: 'center', icon: 'featured_video', hint: 'Big centred title over a dimmed picture.', subtitle: 'Line below (optional)' },
+};
+
 export const bannerSchema = z.object({
   id: z.string().min(1).max(40),
   text: z.string().min(1).max(200),
-  style: z.enum(['lower-third', 'ticker']),
+  subtitle: z.string().max(120).default(''),
+  style: z.enum(BANNER_STYLES),
 });
 export type Banner = z.infer<typeof bannerSchema>;
 
@@ -257,6 +296,7 @@ export const sceneSchema = z.object({
   layout: layoutIdSchema,
   stage: z.array(sourceIdSchema).max(MAX_ON_STAGE),
   banners: z.array(bannerSchema).max(30),
+  /** Superseded by `activeBannerIds`; still read so scenes saved before then keep their banner. */
   activeBannerId: z.string().nullable(),
   comment: commentSchema.nullable(),
   media: z.object({ url: assetUrl }).nullable(),
@@ -275,6 +315,7 @@ export const sceneSchema = z.object({
   cricket: cricketSchema.default(DEFAULT_CRICKET),
   celebration: celebrationSchema.nullable().default(null),
   style: layoutStyleSchema.default(DEFAULT_STYLE),
+  activeBannerIds: z.array(z.string().max(40)).max(8).default([]),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -296,6 +337,7 @@ export const DEFAULT_SCENE: Scene = {
   cricket: DEFAULT_CRICKET,
   celebration: null,
   style: DEFAULT_STYLE,
+  activeBannerIds: [],
 };
 
 /** Parses a stored or received scene, filling in fields that older scenes do not have. */
@@ -336,6 +378,45 @@ export function removeParticipantSources(scene: Scene, identity: string): Scene 
   return stage.length === scene.stage.length ? scene : { ...scene, stage };
 }
 
-export function activeBanner(scene: Scene): Banner | null {
-  return scene.banners.find((b) => b.id === scene.activeBannerId) ?? null;
+/** Every banner that is showing, at most one per slot. */
+export function activeBanners(scene: Scene): Banner[] {
+  const ids = new Set(scene.activeBannerIds);
+  if (scene.activeBannerId) ids.add(scene.activeBannerId);
+  const bySlot = new Map<BannerSlot, Banner>();
+  for (const banner of scene.banners) {
+    if (ids.has(banner.id)) bySlot.set(BANNER_STYLE_INFO[banner.style].slot, banner);
+  }
+  return [...bySlot.values()];
+}
+
+export function bannerInSlot(scene: Scene, slot: BannerSlot): Banner | null {
+  return activeBanners(scene).find((b) => BANNER_STYLE_INFO[b.style].slot === slot) ?? null;
+}
+
+/** Shows a banner, replacing whatever was in its slot, or hides it if it was showing. */
+export function toggleBanner(scene: Scene, id: string): Scene {
+  const banner = scene.banners.find((b) => b.id === id);
+  if (!banner) return scene;
+  const shown = activeBanners(scene);
+  const slot = BANNER_STYLE_INFO[banner.style].slot;
+  const others = shown.filter((b) => BANNER_STYLE_INFO[b.style].slot !== slot).map((b) => b.id);
+  const wasShown = shown.some((b) => b.id === id);
+  return { ...scene, activeBannerId: null, activeBannerIds: wasShown ? others : [...others, id] };
+}
+
+export function addBanner(scene: Scene, banner: Banner): Scene {
+  return { ...scene, banners: [...scene.banners, banner].slice(-30) };
+}
+
+export function removeBanner(scene: Scene, id: string): Scene {
+  return {
+    ...scene,
+    banners: scene.banners.filter((b) => b.id !== id),
+    activeBannerId: scene.activeBannerId === id ? null : scene.activeBannerId,
+    activeBannerIds: scene.activeBannerIds.filter((active) => active !== id),
+  };
+}
+
+export function hideAllBanners(scene: Scene): Scene {
+  return { ...scene, activeBannerId: null, activeBannerIds: [] };
 }
