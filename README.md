@@ -37,7 +37,12 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
   screens fade in and out.
 - **Auto director.** Guests go on stage as they join (up to a number you set, 3 by default), the
   layout re-arranges itself, the speaker is highlighted, and optionally moved to the main spot.
-- **Templates.** News room, Sports and Cricket (with an editable scoreboard), Watch party.
+- **News room.** Anchor, interview, panel and full-screen headline scenes, with a channel bar,
+  clock, headline and second line, story points and a ticker strip.
+- **Cricket.** Score ball by ball (runs, wickets, wides, no-balls). A score strip under the video
+  or a full match dashboard: score, overs, run rates, batters, bowler, this over, and the chase.
+- **Watch party.** Shared video on top, emoji reactions, and a winner celebration with trophy and
+  confetti.
 - **Holding screens.** Starting soon, Be right back, Thanks for watching. They mute the stream.
 - **Guests.** Invite link, no account; camera and microphone check before joining. The host can
   mute or remove a guest.

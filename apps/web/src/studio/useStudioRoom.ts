@@ -72,6 +72,41 @@ function parseScene(metadata: string | undefined, fallback: Scene): Scene {
   }
 }
 
+/**
+ * Turns a device on, trying once more after a pause. The green room has only just let go of the
+ * camera, and some drivers refuse to reopen it for a moment ("device in use").
+ */
+async function startDevice(enable: () => Promise<unknown>): Promise<void> {
+  for (const pauseMs of [0, 800]) {
+    if (pauseMs) await new Promise((resolve) => setTimeout(resolve, pauseMs));
+    try {
+      await enable();
+      return;
+    } catch {
+      // Try again, then give up quietly: the user can still turn it on from the control bar.
+    }
+  }
+}
+
+const CAMERA_SETTLE_MS = 1500;
+
+/**
+ * Turns the camera on and checks a moment later that it stayed on. A camera reopened right after
+ * the green room released it can come up and then stop at once; when that happens it is restarted.
+ */
+async function startCamera(room: Room): Promise<void> {
+  const local = room.localParticipant;
+  await startDevice(() => local.setCameraEnabled(true));
+  await new Promise((resolve) => setTimeout(resolve, CAMERA_SETTLE_MS));
+  if (room.state !== 'connected') return;
+
+  const publication = local.getTrackPublication(Track.Source.Camera);
+  const alive = publication?.track?.mediaStreamTrack.readyState === 'live' && !publication.isMuted;
+  if (alive) return;
+  await local.setCameraEnabled(false).catch(() => undefined);
+  await startDevice(() => local.setCameraEnabled(true));
+}
+
 const END_REASONS: Partial<Record<DisconnectReason, string>> = {
   [DisconnectReason.PARTICIPANT_REMOVED]: 'The host removed you from the studio.',
   [DisconnectReason.ROOM_DELETED]: 'The studio was closed.',
@@ -156,8 +191,8 @@ export function useStudioRoom(session: StudioSession, join: JoinOptions): Studio
         setRemoteScene((current) => parseScene(next.metadata, current));
         setStatus('connected');
         // A blocked or missing device must not keep someone out of the studio.
-        if (join.mic) await next.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
-        if (join.camera) await next.localParticipant.setCameraEnabled(true).catch(() => undefined);
+        if (join.mic) await startDevice(() => next.localParticipant.setMicrophoneEnabled(true));
+        if (join.camera) await startCamera(next);
         bump();
       } catch (err) {
         if (cancelled) return;

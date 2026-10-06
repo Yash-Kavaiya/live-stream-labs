@@ -20,14 +20,14 @@ export interface Tile {
 
 export const PROGRAM_SIZE: Size = { width: 1280, height: 720 };
 
-const ASPECT = 16 / 9;
+export const ASPECT = 16 / 9;
 
 function fitFor(id: string): Tile['fit'] {
   const { kind } = parseSourceId(id);
   return kind === 'cam' ? 'cover' : 'contain';
 }
 
-function tile(id: string, x: number, y: number, width: number, height: number, radius: number): Tile {
+export function tile(id: string, x: number, y: number, width: number, height: number, radius: number): Tile {
   return {
     id,
     x: Math.round(x),

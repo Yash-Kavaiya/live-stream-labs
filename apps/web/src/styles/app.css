@@ -222,7 +222,22 @@
 .template-card .label-large { padding-inline: 4px; }
 .template-swatch { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: var(--md-sys-shape-corner-small); overflow: hidden; }
 .template-accent { position: absolute; left: 8%; bottom: 12%; width: 46%; height: 16%; border-radius: 3px; }
-.scoreboard-fields { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; }
+.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.score-readout { display: grid; gap: 2px; padding: 12px 16px; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container); }
+.ball-pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.ball-button { aspect-ratio: 1; border: 0; border-radius: 50%; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); font: 700 1rem/1 var(--md-ref-typeface-brand); cursor: pointer; transition: transform 0.12s var(--app-motion-standard), box-shadow 0.12s var(--app-motion-standard); }
+.ball-button:hover:not(:disabled) { box-shadow: var(--app-elevation-1); }
+.ball-button:active:not(:disabled) { transform: scale(0.92); }
+.ball-button:disabled { opacity: 0.4; cursor: default; }
+.ball-button.boundary { background: var(--app-warning); color: #1f1f1f; }
+.ball-button.wicket { background: var(--app-live); color: var(--app-on-live); }
+.ball-button:focus-visible, .reaction-button:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
+.reaction-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.reaction-button { height: 52px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; font-size: 1.6rem; line-height: 1; cursor: pointer; transition: transform 0.15s var(--app-motion-standard), background 0.15s var(--app-motion-standard); }
+.reaction-button:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); transform: translateY(-2px) scale(1.08); }
+.reaction-button:active { transform: scale(0.9); }
 
 /* ---------- Server-side render target ---------- */
 

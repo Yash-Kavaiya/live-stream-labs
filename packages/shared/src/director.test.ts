@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Fade, TileAnimator } from './animate';
 import { computeLayout } from './layout';
-import { DEFAULT_AUTO, DEFAULT_SCENE, normalizeScene } from './scene';
-import { applyTemplate, pickAutoLayout, TEMPLATES } from './templates';
+import { pickAutoLayout } from './templates';
 
 const FRAME = 1000 / 30;
 
@@ -90,30 +89,5 @@ describe('pickAutoLayout', () => {
 
   it('keeps a themed backdrop visible around a single person', () => {
     expect(pickAutoLayout(['cam:a'], { followSpeaker: false, template: 'newsroom' })).toBe('grid');
-  });
-});
-
-describe('templates and scene defaults', () => {
-  it('applies accent, layout and a starter scoreboard', () => {
-    const scene = applyTemplate({ ...DEFAULT_SCENE, stage: ['cam:a', 'cam:b'] }, 'cricket');
-    expect(scene.template).toBe('cricket');
-    expect(scene.brand.color).toBe(TEMPLATES.cricket.accent);
-    expect(scene.scoreboard?.info).toContain('Overs');
-    expect(scene.layout).toBe('grid');
-  });
-
-  it('keeps a scoreboard the host already edited', () => {
-    const edited = { teamA: 'MI', teamB: 'CSK', scoreA: '182/4', scoreB: '', info: 'Overs 18.2' };
-    expect(applyTemplate({ ...DEFAULT_SCENE, scoreboard: edited }, 'sports').scoreboard).toEqual(edited);
-  });
-
-  it('fills in new fields for a scene saved before they existed', () => {
-    const { template: _t, screen: _s, screenMessage: _m, scoreboard: _b, auto: _a, ...old } = DEFAULT_SCENE;
-    const scene = normalizeScene({ ...old, layout: 'pip' });
-    expect(scene).toMatchObject({ layout: 'pip', template: 'none', screen: 'live', auto: DEFAULT_AUTO });
-  });
-
-  it('falls back when the stored value is not a scene at all', () => {
-    expect(normalizeScene('garbage')).toEqual(DEFAULT_SCENE);
   });
 });

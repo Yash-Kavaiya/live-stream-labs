@@ -1,6 +1,7 @@
 import {
   activeBanner,
-  computeLayout,
+  computeSceneLayout,
+  CRICKET_STRIP,
   Fade,
   fitRect,
   parseSourceId,
@@ -17,6 +18,10 @@ import {
   type TemplateId,
   type Tile,
 } from '@studio/shared';
+import { CELEBRATION_MS, drawCelebration } from './graphics/celebration';
+import { drawCricketDashboard, drawCricketStrip } from './graphics/cricket';
+import { drawNews } from './graphics/news';
+import { drawPill, ellipsize, FONT, readableOn, wrapText, type Painter } from './graphics/painter';
 
 /** What the compositor needs to know about a source to draw it. */
 export interface DrawableSource {
@@ -26,10 +31,11 @@ export interface DrawableSource {
   speaking: boolean;
 }
 
-const FONT = "'Google Sans Flex', 'Google Sans', 'Roboto Flex', Roboto, system-ui, sans-serif";
 const TILE_EMPTY = '#282a2c';
 const SPEAKING = '#34A853';
 const FPS = 30;
+/** A celebration older than this when first seen has already played for everyone else. */
+const CELEBRATION_STALE_MS = 8000;
 
 /** Loads scene images once and hands back the element when it is ready to draw. */
 class ImageCache {
@@ -51,12 +57,6 @@ function frameSize(frame: HTMLVideoElement | HTMLImageElement): Size | null {
   const width = frame instanceof HTMLVideoElement ? frame.videoWidth : frame.naturalWidth;
   const height = frame instanceof HTMLVideoElement ? frame.videoHeight : frame.naturalHeight;
   return width > 0 && height > 0 ? { width, height } : null;
-}
-
-function readableOn(hex: string): string {
-  const n = parseInt(hex.slice(1), 16);
-  const luminance = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return luminance > 0.6 ? '#1f1f1f' : '#ffffff';
 }
 
 /** An overlay that keeps drawing its last content while it fades out. */
@@ -91,6 +91,9 @@ export class Compositor {
   private readonly comment = new FadingOverlay<OnScreenComment>();
   private readonly holding = new FadingOverlay<{ screen: ScreenId; message: string }>();
   private readonly themed = new FadingOverlay<TemplateId>();
+  private readonly newsHeadline = new FadingOverlay<string>();
+  /** The celebration being played, by id, and when (on the draw clock) it started here. */
+  private celebration: { id: string; startedAt: number } | null = null;
   private scene: Scene | null = null;
   private sources = new Map<string, DrawableSource>();
   private ticker: Worker | null = null;
@@ -148,20 +151,39 @@ export class Compositor {
 
     // Sources whose participant has left are skipped, so the layout closes the gap.
     const present = scene.stage.filter((id) => (id === 'media' ? scene.media : this.sources.has(id)));
-    const targets = computeLayout(scene.layout, present, size);
+    const targets = computeSceneLayout(scene, present, size);
     for (const tile of this.tiles.step(targets, dt)) this.drawTile(tile, scene, dt);
 
     const overlay = this.images.get(scene.brand.overlayUrl);
     if (overlay) this.drawFrame(overlay, { x: 0, y: 0, ...size, fit: 'cover' });
 
-    if (themed) this.withAlpha(themed.alpha, () => this.drawTemplateFurniture(themed.value, scene, now));
+    // In the news room a lower-third banner is the headline: it overrides the saved one.
+    const shown = activeBanner(scene);
+    const isNews = scene.template === 'newsroom';
+    const headlineText = isNews ? ((shown?.style === 'lower-third' ? shown.text : '') || scene.news.headline.trim()) : '';
+    const headline = this.newsHeadline.step(headlineText || null, dt);
+    if (themed) {
+      this.withAlpha(themed.alpha, () =>
+        this.drawTemplateFurniture(themed.value, scene, now, {
+          headline: headline ? { text: headline.value, alpha: headline.alpha } : null,
+          sideOccupied: targets.length > 1,
+        }),
+      );
+    }
     this.drawLogo(scene);
 
-    const banner = this.banner.step(activeBanner(scene), dt);
+    // The news room shows a lower-third banner as its headline, and the cricket dashboard has no
+    // free space for one; a ticker still runs in both.
+    const fullFrame = isNews || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
+    const banner = this.banner.step(fullFrame && shown?.style === 'lower-third' ? null : shown, dt);
     this.bannerZone = { top: Infinity, alpha: 0 };
     if (banner) this.drawBanner(banner.value, banner.alpha, scene, now);
+    // Comments clear the news lower third.
+    if (isNews) this.bottomInset = Math.max(this.bottomInset, this.unit * 22);
     const comment = this.comment.step(scene.comment, dt);
     if (comment) this.drawComment(comment.value, comment.alpha, scene);
+
+    this.drawCelebrationLayer(scene, now);
 
     const holding = this.holding.step(
       scene.screen === 'live' ? null : { screen: scene.screen, message: scene.screenMessage },
@@ -281,7 +303,7 @@ export class Compositor {
     const padX = fontSize * 0.7;
     const height = fontSize * 1.9;
     ctx.font = `500 ${fontSize}px ${FONT}`;
-    const text = this.ellipsize(label, tile.width * 0.7 - padX * 2);
+    const text = ellipsize(this.ctx, label, tile.width * 0.7 - padX * 2);
     const width = ctx.measureText(text).width + padX * 2;
     const x = tile.x + fontSize * 0.6;
     const y = tile.y + tile.height - height - fontSize * 0.6;
@@ -303,25 +325,17 @@ export class Compositor {
 
   // ---------- Templates ----------
 
+  private get painter(): Painter {
+    return { ctx: this.ctx, size: this.size, unit: this.unit };
+  }
+
   private drawBackdrop(template: TemplateId): void {
     const { ctx, size, unit } = this;
     ctx.fillStyle = this.gradient(TEMPLATES[template].backdrop);
     ctx.fillRect(0, 0, size.width, size.height);
-    const accent = TEMPLATES[template].accent;
 
-    if (template === 'sports') {
-      // Diagonal speed stripes in the top-right corner.
-      ctx.save();
-      ctx.translate(size.width, 0);
-      ctx.rotate(Math.PI / 4);
-      [0.5, 0.28, 0.14].forEach((alpha, i) => {
-        ctx.globalAlpha *= alpha;
-        ctx.fillStyle = accent;
-        ctx.fillRect(-size.width, unit * (10 + i * 7), size.width * 2, unit * 3.4);
-      });
-      ctx.restore();
-    } else if (template === 'cricket') {
-      // The pitch: a pale strip and a boundary arc, very faint.
+    if (template === 'cricket') {
+      // The boundary rope, very faint.
       ctx.save();
       ctx.globalAlpha *= 0.1;
       ctx.strokeStyle = '#ffffff';
@@ -329,13 +343,12 @@ export class Compositor {
       ctx.beginPath();
       ctx.ellipse(size.width / 2, size.height * 1.05, size.width * 0.62, size.height * 0.8, 0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(size.width / 2 - unit * 5, size.height * 0.35, unit * 10, size.height * 0.5);
       ctx.restore();
     } else if (template === 'watchparty') {
       ctx.save();
+      const base = ctx.globalAlpha;
       for (const [x, y, r, alpha] of [[0.12, 0.2, 26, 0.18], [0.88, 0.14, 18, 0.14], [0.8, 0.86, 34, 0.12], [0.2, 0.9, 16, 0.16]] as const) {
-        ctx.globalAlpha = this.ctx.globalAlpha * alpha;
+        ctx.globalAlpha = base * alpha;
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(size.width * x, size.height * y, unit * r, 0, Math.PI * 2);
@@ -343,7 +356,7 @@ export class Compositor {
       }
       ctx.restore();
     } else if (template === 'newsroom') {
-      // A faint world-grid of latitude lines.
+      // A faint globe of latitude lines behind the presenter.
       ctx.save();
       ctx.globalAlpha *= 0.08;
       ctx.strokeStyle = '#ffffff';
@@ -357,128 +370,37 @@ export class Compositor {
     }
   }
 
-  /** The fixed on-screen graphics of a template: bugs, labels and scoreboards. */
-  private drawTemplateFurniture(template: TemplateId, scene: Scene, now: number): void {
+  /** The fixed on-screen graphics of a template: channel bar, headlines, scoreboards. */
+  private drawTemplateFurniture(
+    template: TemplateId,
+    scene: Scene,
+    now: number,
+    news: { headline: { text: string; alpha: number } | null; sideOccupied: boolean },
+  ): void {
     const { unit } = this;
     if (template === 'newsroom') {
-      const clock = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const end = this.drawPill(unit * 3, unit * 3, 'LIVE', TEMPLATES.newsroom.accent, '#ffffff', now);
-      this.drawPill(end + unit, unit * 3, clock, 'rgb(0 0 0 / 0.55)', '#ffffff');
+      drawNews(this.painter, scene, { ...news, now });
     } else if (template === 'watchparty') {
-      this.drawPill(unit * 3, unit * 3, 'WATCH PARTY', scene.brand.color, readableOn(scene.brand.color), now);
-    } else if (template === 'sports' && scene.scoreboard) {
-      this.drawScorebug(scene);
-    } else if (template === 'cricket' && scene.scoreboard) {
-      this.drawCricketStrip(scene);
+      drawPill(this.painter, unit * 3, unit * 3, 'WATCH PARTY', scene.brand.color, readableOn(scene.brand.color), now);
+    } else if (template === 'cricket' && scene.cricket.view === 'dashboard') {
+      drawCricketDashboard(this.painter, scene, news.sideOccupied || scene.stage.length > 0);
+    } else if (template === 'cricket') {
+      drawCricketStrip(this.painter, scene);
+      // Banners, the ticker and comments sit above the strip.
+      this.bottomInset += CRICKET_STRIP * unit;
     }
   }
 
-  /** A small rounded label; with `pulseAt` it gets a blinking "on air" dot. Returns its right edge. */
-  private drawPill(x: number, y: number, text: string, fill: string, color: string, pulseAt?: number): number {
-    const { ctx, unit } = this;
-    const fontSize = unit * 2.6;
-    const height = fontSize * 1.9;
-    const padX = fontSize * 0.8;
-    const dot = pulseAt === undefined ? 0 : fontSize * 1.1;
-    ctx.font = `700 ${fontSize}px ${FONT}`;
-    const width = ctx.measureText(text).width + padX * 2 + dot;
-
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, height, unit * 1);
-    ctx.fill();
-    ctx.fillStyle = color;
-    if (pulseAt !== undefined) {
-      ctx.save();
-      ctx.globalAlpha *= 0.45 + 0.55 * Math.abs(Math.sin(pulseAt / 500));
-      ctx.beginPath();
-      ctx.arc(x + padX + fontSize * 0.25, y + height / 2, fontSize * 0.32, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+  /** Plays a celebration once, starting when this client first sees its id. */
+  private drawCelebrationLayer(scene: Scene, now: number): void {
+    const next = scene.celebration;
+    if (!next) return;
+    if (next.id !== this.celebration?.id) {
+      const stale = Date.now() - next.at > CELEBRATION_STALE_MS;
+      this.celebration = { id: next.id, startedAt: stale ? -Infinity : now };
     }
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + padX + dot, y + height / 2 + fontSize * 0.05);
-    return x + width;
-  }
-
-  /** Sports: a two-row scorebug in the top-left corner with the match info underneath. */
-  private drawScorebug(scene: Scene): void {
-    const { ctx, unit } = this;
-    const board = scene.scoreboard!;
-    const accent = scene.brand.color;
-    const x = unit * 3;
-    const y = unit * 3;
-    const rowH = unit * 5.4;
-    const nameW = unit * 20;
-    const scoreW = unit * 9;
-    const fontSize = unit * 3;
-
-    ctx.fillStyle = 'rgb(8 12 20 / 0.88)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, nameW + scoreW, rowH * 2 + (board.info ? unit * 4 : 0), unit * 1.2);
-    ctx.fill();
-
-    [[board.teamA, board.scoreA], [board.teamB, board.scoreB]].forEach(([team, score], row) => {
-      const top = y + row * rowH;
-      ctx.fillStyle = accent;
-      ctx.fillRect(x + nameW, top + unit * 0.5, scoreW - unit * 0.5, rowH - unit);
-      ctx.textBaseline = 'middle';
-      ctx.font = `700 ${fontSize}px ${FONT}`;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(this.ellipsize(team!.toUpperCase(), nameW - unit * 3), x + unit * 1.6, top + rowH / 2);
-      ctx.textAlign = 'center';
-      ctx.fillStyle = readableOn(accent);
-      ctx.fillText(this.ellipsize(score!, scoreW - unit * 1.5), x + nameW + scoreW / 2 - unit * 0.25, top + rowH / 2);
-    });
-
-    if (board.info) {
-      ctx.font = `500 ${unit * 2.2}px ${FONT}`;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgb(255 255 255 / 0.8)';
-      ctx.fillText(this.ellipsize(board.info, nameW + scoreW - unit * 3), x + unit * 1.6, y + rowH * 2 + unit * 2);
-    }
-  }
-
-  /** Cricket: the classic full-width score strip along the bottom edge. */
-  private drawCricketStrip(scene: Scene): void {
-    const { ctx, unit, size } = this;
-    const board = scene.scoreboard!;
-    const accent = scene.brand.color;
-    const height = unit * 8;
-    const y = size.height - height - this.bottomInset;
-    const fontSize = unit * 3.4;
-
-    ctx.fillStyle = 'rgb(4 16 9 / 0.92)';
-    ctx.fillRect(0, y, size.width, height);
-    ctx.fillStyle = accent;
-    ctx.fillRect(0, y, size.width, unit * 0.6);
-
-    ctx.textBaseline = 'middle';
-    const mid = y + height / 2 + unit * 0.3;
-    let x = unit * 3;
-    const segment = (text: string, weight: number, color: string, gap: number) => {
-      if (!text) return;
-      ctx.font = `${weight} ${fontSize}px ${FONT}`;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = color;
-      ctx.fillText(text, x, mid);
-      x += ctx.measureText(text).width + unit * gap;
-    };
-    segment(board.teamA.toUpperCase(), 700, '#ffffff', 1.6);
-    segment(board.scoreA, 700, '#fdd663', 3);
-    if (board.teamB) segment('v', 400, 'rgb(255 255 255 / 0.6)', 3);
-    segment(board.teamB.toUpperCase(), 700, '#ffffff', 1.6);
-    segment(board.scoreB, 700, '#fdd663', 3);
-
-    if (board.info) {
-      ctx.font = `500 ${unit * 2.8}px ${FONT}`;
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgb(255 255 255 / 0.85)';
-      ctx.fillText(this.ellipsize(board.info, size.width - x - unit * 4), size.width - unit * 3, mid);
-    }
-    this.bottomInset += height;
+    const elapsed = now - this.celebration.startedAt;
+    if (elapsed < CELEBRATION_MS[next.kind]) drawCelebration(this.painter, next, elapsed);
   }
 
   // ---------- Overlays ----------
@@ -528,39 +450,17 @@ export class Compositor {
     const y = size.height - height - unit * 6 - this.bottomInset + slide;
     this.bannerZone = { top: y - unit, alpha };
 
-    if (scene.template === 'newsroom') {
-      // News headline: a tag in the accent colour, then the headline on white, edge to edge.
-      const x = unit * 4;
-      const width = size.width - unit * 8;
-      ctx.font = `700 ${fontSize * 0.7}px ${FONT}`;
-      const tag = 'BREAKING';
-      const tagW = ctx.measureText(tag).width + fontSize * 1.4;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.roundRect(x, y, width, height, unit * 0.8);
-      ctx.fill();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.roundRect(x, y, tagW, height, [unit * 0.8, 0, 0, unit * 0.8]);
-      ctx.fill();
-      ctx.fillStyle = readableOn(color);
-      ctx.fillText(tag, x + fontSize * 0.7, y + height / 2 + fontSize * 0.04);
-      ctx.fillStyle = '#1f1f1f';
-      ctx.font = `700 ${fontSize}px ${FONT}`;
-      ctx.fillText(this.ellipsize(banner.text, width - tagW - fontSize * 1.6), x + tagW + fontSize * 0.8, y + height / 2 + fontSize * 0.04);
-    } else {
-      const padX = fontSize * 0.9;
-      const maxWidth = size.width * 0.8;
-      const text = this.ellipsize(banner.text, maxWidth - padX * 2);
-      const width = Math.min(maxWidth, ctx.measureText(text).width + padX * 2);
-      const x = unit * 4;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.roundRect(x, y, width, height, unit * 1.6);
-      ctx.fill();
-      ctx.fillStyle = readableOn(color);
-      ctx.fillText(text, x + padX, y + height / 2 + fontSize * 0.04);
-    }
+    const padX = fontSize * 0.9;
+    const maxWidth = size.width * 0.8;
+    const text = ellipsize(this.ctx, banner.text, maxWidth - padX * 2);
+    const width = Math.min(maxWidth, ctx.measureText(text).width + padX * 2);
+    const x = unit * 4;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, unit * 1.6);
+    ctx.fill();
+    ctx.fillStyle = readableOn(color);
+    ctx.fillText(text, x + padX, y + height / 2 + fontSize * 0.04);
     ctx.restore();
     this.bottomInset += (height + unit * 4) * alpha;
   }
@@ -575,7 +475,7 @@ export class Compositor {
     ctx.save();
     ctx.globalAlpha *= alpha;
     ctx.font = `400 ${textSize}px ${FONT}`;
-    const lines = this.wrap(comment.text, width - pad * 2, 3);
+    const lines = wrapText(this.ctx, comment.text, width - pad * 2, 3);
     const height = pad * 2 + authorSize * 1.5 + lines.length * textSize * 1.3;
     const x = (size.width - width) / 2;
     const y = size.height - height - unit * 6 - this.bottomInset + (1 - alpha) * unit * 4;
@@ -600,7 +500,7 @@ export class Compositor {
     ctx.fillStyle = '#444746';
     ctx.font = `500 ${authorSize}px ${FONT}`;
     const via = comment.platform && comment.platform !== 'Studio' ? `  ·  ${comment.platform}` : '';
-    ctx.fillText(this.ellipsize(`${comment.author}${via}`, width - pad * 2), x + pad, y + pad);
+    ctx.fillText(ellipsize(this.ctx, `${comment.author}${via}`, width - pad * 2), x + pad, y + pad);
     ctx.fillStyle = '#1f1f1f';
     ctx.font = `400 ${textSize}px ${FONT}`;
     lines.forEach((line, i) => {
@@ -642,7 +542,7 @@ export class Compositor {
     if (holding.message) {
       ctx.font = `400 ${unit * 4}px ${FONT}`;
       ctx.fillStyle = 'rgb(255 255 255 / 0.82)';
-      ctx.fillText(this.ellipsize(holding.message, size.width * 0.8), cx, y);
+      ctx.fillText(ellipsize(this.ctx, holding.message, size.width * 0.8), cx, y);
       y += unit * 8;
     }
 
@@ -661,37 +561,5 @@ export class Compositor {
         ctx.restore();
       }
     }
-  }
-
-  // ---------- Text ----------
-
-  private ellipsize(text: string, maxWidth: number): string {
-    const { ctx } = this;
-    if (ctx.measureText(text).width <= maxWidth) return text;
-    let cut = text.length;
-    while (cut > 1 && ctx.measureText(`${text.slice(0, cut)}…`).width > maxWidth) cut--;
-    return `${text.slice(0, cut).trimEnd()}…`;
-  }
-
-  /** Greedy word wrap; whatever does not fit in `maxLines` is ellipsized on the last line. */
-  private wrap(text: string, maxWidth: number, maxLines: number): string[] {
-    const words = text.split(/\s+/).filter(Boolean);
-    const lines: string[] = [];
-    let line = '';
-    for (const [i, word] of words.entries()) {
-      const next = line ? `${line} ${word}` : word;
-      if (!line || this.ctx.measureText(next).width <= maxWidth) {
-        line = next;
-        continue;
-      }
-      if (lines.length === maxLines - 1) {
-        line = `${line} ${words.slice(i).join(' ')}`;
-        break;
-      }
-      lines.push(line);
-      line = word;
-    }
-    lines.push(this.ellipsize(line, maxWidth));
-    return lines;
   }
 }

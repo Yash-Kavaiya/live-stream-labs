@@ -185,6 +185,8 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
   const isLive = live.phase === 'live';
   const stageHasMedia = scene.stage.includes('media');
+  const templateOwnsLayout =
+    scene.template === 'newsroom' || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
 
   return (
     <div className="studio" data-testid="studio" data-status={studio.status}>
@@ -251,7 +253,13 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
           {isHost && (
             <div className="row wrap" style={{ justifyContent: 'space-between' }}>
-              <LayoutPicker value={scene.layout} onChange={(layout) => updateScene((s) => ({ ...s, layout }))} />
+              {templateOwnsLayout ? (
+                <span className="chip">
+                  <Icon name="dashboard_customize" /> Layout is set by the {scene.template === 'newsroom' ? 'news scene' : 'match dashboard'}
+                </span>
+              ) : (
+                <LayoutPicker value={scene.layout} onChange={(layout) => updateScene((s) => ({ ...s, layout }))} />
+              )}
               {isLive && destinations.some((d) => d.status === 'failed') && (
                 <span className="chip error"><Icon name="error" /> A destination dropped</span>
               )}

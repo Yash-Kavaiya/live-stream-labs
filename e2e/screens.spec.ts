@@ -58,11 +58,35 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByTestId('banner-add').click();
     await page.getByTestId('banner-toggle').click();
     await page.getByTestId('tab-scenes').click();
-    for (const template of ['newsroom', 'sports', 'cricket', 'watchparty']) {
-      await page.getByTestId(`template-${template}`).click();
+    // News room: every scene, with a headline and story points.
+    await page.getByTestId('template-newsroom').click();
+    await field(page, 'news-headline-text').fill('Markets rally as rates hold steady');
+    for (const view of ['anchor', 'interview', 'panel', 'headline']) {
+      await page.getByTestId(`news-${view}`).click();
       await page.waitForTimeout(1200);
-      await program(template);
+      await program(`news-${view}`);
     }
+
+    // Cricket: score an over, then both views.
+    await page.getByTestId('template-cricket').click();
+    for (const ball of ['1', '4', '0', 'W', '6', 'wd', '2']) await page.getByTestId(`ball-${ball}`).click();
+    await page.waitForTimeout(1200);
+    await program('cricket-match');
+    await page.getByTestId('cricket-dashboard').click();
+    await page.waitForTimeout(1200);
+    await program('cricket-dashboard');
+
+    // Watch party: mid-celebration.
+    await page.getByTestId('template-watchparty').click();
+    await field(page, 'winner-name').fill('Team Rocket');
+    await page.getByTestId('celebrate-winner').click();
+    await page.waitForTimeout(1800);
+    await program('watchparty-winner');
+    await page.waitForTimeout(5500);
+    await page.getByTestId('reaction').first().click();
+    await page.waitForTimeout(1500);
+    await program('watchparty-reaction');
+
     await page.getByTestId('screen-starting').click();
     await page.waitForTimeout(1200);
     await program('starting');

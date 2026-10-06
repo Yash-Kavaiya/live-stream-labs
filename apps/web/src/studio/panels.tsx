@@ -7,7 +7,6 @@ import {
   TEMPLATE_IDS,
   TEMPLATES,
   type AutoDirector,
-  type Scoreboard,
   type ScreenId,
   type Banner,
   type CommentDto,
@@ -19,6 +18,7 @@ import { Button, EmptyState, Icon, IconButton, Switch, TextField } from '@studio
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useToast } from '../lib/app-context';
+import { TemplateControls } from './template-panels';
 import type { ChatEntry } from './useStudioRoom';
 
 export type SceneUpdater = (change: (scene: Scene) => Scene) => void;
@@ -261,7 +261,7 @@ export function ChatPanel({ chat, onSend }: { chat: ChatEntry[]; onSend(text: st
   );
 }
 
-// ---------- Scenes: holding screens, templates, scoreboard, auto director ----------
+// ---------- Scenes: holding screens, templates, auto director ----------
 
 const SCREEN_BUTTONS: Record<ScreenId, { label: string; icon: string }> = {
   live: { label: 'Live', icon: 'videocam' },
@@ -270,19 +270,11 @@ const SCREEN_BUTTONS: Record<ScreenId, { label: string; icon: string }> = {
   ending: { label: 'Ending', icon: 'waving_hand' },
 };
 
-const SCOREBOARD_LABELS: Record<'sports' | 'cricket', Record<keyof Scoreboard, string>> = {
-  sports: { teamA: 'Home team', scoreA: 'Home score', teamB: 'Away team', scoreB: 'Away score', info: 'Period or clock' },
-  cricket: { teamA: 'Batting team', scoreA: 'Runs / wickets', teamB: 'Bowling team', scoreB: 'Their score', info: 'Overs, target, run rate' },
-};
-
-const SCOREBOARD_FIELDS: (keyof Scoreboard)[] = ['teamA', 'scoreA', 'teamB', 'scoreB', 'info'];
-
 export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpdater }) {
   const template = TEMPLATES[scene.template];
   const setAuto = (patch: Partial<AutoDirector>) => update((s) => ({ ...s, auto: { ...s.auto, ...patch } }));
   const stepMax = (by: number) =>
     setAuto({ maxOnStage: Math.min(MAX_ON_STAGE, Math.max(1, scene.auto.maxOnStage + by)) });
-  const scoreLabels = scene.template === 'cricket' ? SCOREBOARD_LABELS.cricket : SCOREBOARD_LABELS.sports;
 
   return (
     <div className="panel-scroll col" style={{ gap: 24 }}>
@@ -345,24 +337,7 @@ export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpda
         <p className="body-small muted">{template.description}</p>
       </section>
 
-      {template.scoreboard && scene.scoreboard && (
-        <section className="col">
-          <h3 className="title-small">Scoreboard</h3>
-          <div className="scoreboard-fields">
-            {SCOREBOARD_FIELDS.map((field) => (
-              <TextField
-                key={field}
-                label={scoreLabels[field]}
-                value={scene.scoreboard![field]}
-                onValue={(value) => update((s) => (s.scoreboard ? { ...s, scoreboard: { ...s.scoreboard, [field]: value } } : s))}
-                maxLength={field === 'info' ? 60 : field.startsWith('team') ? 24 : 12}
-                style={field === 'info' ? { gridColumn: '1 / -1' } : undefined}
-                data-testid={`score-${field}`}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <TemplateControls scene={scene} update={update} />
 
       <section className="col">
         <h3 className="title-small">Auto director</h3>

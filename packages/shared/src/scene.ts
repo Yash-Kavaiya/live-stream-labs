@@ -66,7 +66,7 @@ export const brandSchema = z.object({
 });
 export type Brand = z.infer<typeof brandSchema>;
 
-export const TEMPLATE_IDS = ['none', 'newsroom', 'sports', 'cricket', 'watchparty'] as const;
+export const TEMPLATE_IDS = ['none', 'newsroom', 'cricket', 'watchparty'] as const;
 export const templateIdSchema = z.enum(TEMPLATE_IDS);
 export type TemplateId = z.infer<typeof templateIdSchema>;
 
@@ -75,15 +75,103 @@ export const SCREEN_IDS = ['live', 'starting', 'brb', 'ending'] as const;
 export const screenIdSchema = z.enum(SCREEN_IDS);
 export type ScreenId = z.infer<typeof screenIdSchema>;
 
-/** Free-text on purpose: "2", "182/4" and "40-15" are all scores. */
-export const scoreboardSchema = z.object({
-  teamA: z.string().max(24),
-  teamB: z.string().max(24),
-  scoreA: z.string().max(12),
-  scoreB: z.string().max(12),
-  info: z.string().max(60),
+// ---------- News room ----------
+
+/**
+ * The shots of a news programme:
+ *   anchor     one presenter, with a story panel (or the other sources) beside them
+ *   interview  everyone side by side in equal boxes
+ *   panel      a grid of everyone, for a discussion
+ *   headline   a full-frame headline graphic with the presenter in a corner
+ */
+export const NEWS_VIEWS = ['anchor', 'interview', 'panel', 'headline'] as const;
+export type NewsView = (typeof NEWS_VIEWS)[number];
+
+export const newsSchema = z.object({
+  view: z.enum(NEWS_VIEWS),
+  channel: z.string().max(24),
+  /** The label in front of the headline: BREAKING, LIVE, DEVELOPING... */
+  tag: z.string().max(16),
+  headline: z.string().max(90),
+  subhead: z.string().max(120),
+  /** Story points for the anchor panel, one per line. */
+  points: z.string().max(300),
 });
-export type Scoreboard = z.infer<typeof scoreboardSchema>;
+export type News = z.infer<typeof newsSchema>;
+
+export const DEFAULT_NEWS: News = {
+  view: 'anchor',
+  channel: 'STUDIO NEWS',
+  tag: 'BREAKING',
+  headline: '',
+  subhead: '',
+  points: '',
+};
+
+// ---------- Cricket ----------
+
+const count = z.number().int().min(0).max(9999);
+const playerName = z.string().max(24);
+
+export const batterSchema = z.object({ name: playerName, runs: count, balls: count });
+export type Batter = z.infer<typeof batterSchema>;
+
+/** One innings, scored ball by ball. See `cricket.ts` for the scoring rules. */
+export const cricketSchema = z.object({
+  /** match: video with a score strip. dashboard: the full scorecard with cameras at the side. */
+  view: z.enum(['match', 'dashboard']),
+  title: z.string().max(40),
+  batting: playerName,
+  bowling: playerName,
+  runs: count,
+  wickets: z.number().int().min(0).max(10),
+  /** Legal balls bowled in the innings. */
+  balls: count,
+  oversLimit: z.number().int().min(1).max(90),
+  /** Runs needed to win when chasing; null in the first innings. */
+  target: count.nullable(),
+  batters: z.tuple([batterSchema, batterSchema]),
+  striker: z.union([z.literal(0), z.literal(1)]),
+  bowler: z.object({ name: playerName, balls: count, runs: count, wickets: count }),
+  /** Outcomes of the current over, oldest first: "0".."6", "W", "wd", "nb". */
+  thisOver: z.array(z.string().max(3)).max(14),
+});
+export type Cricket = z.infer<typeof cricketSchema>;
+
+export const DEFAULT_CRICKET: Cricket = {
+  view: 'match',
+  title: 'T20 Match',
+  batting: 'IND',
+  bowling: 'AUS',
+  runs: 0,
+  wickets: 0,
+  balls: 0,
+  oversLimit: 20,
+  target: null,
+  batters: [
+    { name: 'Batter 1', runs: 0, balls: 0 },
+    { name: 'Batter 2', runs: 0, balls: 0 },
+  ],
+  striker: 0,
+  bowler: { name: 'Bowler', balls: 0, runs: 0, wickets: 0 },
+  thisOver: [],
+};
+
+// ---------- Celebrations ----------
+
+/**
+ * A one-shot animation over the whole frame. Every client plays it when it sees a new `id`;
+ * `at` lets someone who joins later skip one that is already over.
+ */
+export const celebrationSchema = z.object({
+  id: z.string().max(40),
+  kind: z.enum(['winner', 'reaction']),
+  emoji: z.string().max(8),
+  /** Winner's name. Empty for a reaction. */
+  text: z.string().max(40),
+  at: z.number(),
+});
+export type Celebration = z.infer<typeof celebrationSchema>;
 
 /** What the studio does by itself so the host does not have to direct every change. */
 export const autoSchema = z.object({
@@ -115,12 +203,15 @@ export const sceneSchema = z.object({
   comment: commentSchema.nullable(),
   media: z.object({ url: assetUrl }).nullable(),
   brand: brandSchema,
-  // Added after the first release; defaults keep scenes saved before then valid.
-  template: templateIdSchema.default('none'),
+  // Added after the first release; defaults keep scenes saved before then valid, and `catch`
+  // maps a template that no longer exists back to the clean look.
+  template: templateIdSchema.default('none').catch('none'),
   screen: screenIdSchema.default('live'),
   screenMessage: z.string().max(80).default(''),
-  scoreboard: scoreboardSchema.nullable().default(null),
   auto: autoSchema.default(DEFAULT_AUTO),
+  news: newsSchema.default(DEFAULT_NEWS),
+  cricket: cricketSchema.default(DEFAULT_CRICKET),
+  celebration: celebrationSchema.nullable().default(null),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -135,8 +226,10 @@ export const DEFAULT_SCENE: Scene = {
   template: 'none',
   screen: 'live',
   screenMessage: '',
-  scoreboard: null,
   auto: DEFAULT_AUTO,
+  news: DEFAULT_NEWS,
+  cricket: DEFAULT_CRICKET,
+  celebration: null,
 };
 
 /** Parses a stored or received scene, filling in fields that older scenes do not have. */

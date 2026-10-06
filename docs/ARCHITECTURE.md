@@ -50,7 +50,10 @@ any change, whoever makes it, animates the same way on every client and in the s
 and edits the scene: it stages joining guests up to `auto.maxOnStage`, re-picks the layout with
 `pickAutoLayout` when the stage changes, and promotes the active speaker. Because it writes the
 same scene the host edits by hand, a manual choice always wins until the stage next changes.
-Templates and holding screens are scene fields too (`template`, `screen`, `scoreboard`).
+Templates and holding screens are scene fields too (`template`, `screen`, `news`, `cricket`,
+`celebration`). A template can own the layout: `computeSceneLayout` routes to the news scenes or
+the cricket views, and the matching graphics live in `apps/web/src/studio/graphics/`. Cricket
+scoring is a pure reducer (`recordBall` in `packages/shared/src/cricket.ts`).
 
 **Egress is an interface with two implementations** (`apps/api/src/egress/providers.ts`):
 
