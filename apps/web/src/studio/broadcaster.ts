@@ -4,6 +4,17 @@ export class AudioMixer {
   private readonly out = this.ctx.createMediaStreamDestination();
   private readonly inputs = new Map<string, MediaStreamAudioSourceNode>();
 
+  constructor() {
+    // A mix with nothing connected produces no audio at all, not silence, and the recorder then
+    // holds back the video too: the stream stops the moment everyone on stage is muted. A silent
+    // source that is always connected keeps the audio, and so the whole stream, flowing.
+    const silence = this.ctx.createConstantSource();
+    const mute = this.ctx.createGain();
+    mute.gain.value = 0;
+    silence.connect(mute).connect(this.out);
+    silence.start();
+  }
+
   get track(): MediaStreamTrack {
     return this.out.stream.getAudioTracks()[0]!;
   }

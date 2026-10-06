@@ -170,10 +170,21 @@ const playerName = z.string().max(24);
 export const batterSchema = z.object({ name: playerName, runs: count, balls: count });
 export type Batter = z.infer<typeof batterSchema>;
 
-/** One innings, scored ball by ball. See `cricket.ts` for the scoring rules. */
+/**
+ * How the cricket template arranges the frame:
+ *
+ *   match      cameras in the usual layout above a score strip
+ *   bug        cameras fill the frame, with a small score box in the corner
+ *   split      cameras on the left, a score panel on the right
+ *   dashboard  the full scoreboard, cameras in a column at the side
+ *   card       the batting and bowling card, cameras in a column at the side
+ */
+export const CRICKET_VIEWS = ['match', 'bug', 'split', 'dashboard', 'card'] as const;
+export type CricketView = (typeof CRICKET_VIEWS)[number];
+
+/** One innings, scored ball by ball by hand or followed from a live score feed. See `cricket.ts`. */
 export const cricketSchema = z.object({
-  /** match: video with a score strip. dashboard: the full scorecard with cameras at the side. */
-  view: z.enum(['match', 'dashboard']),
+  view: z.enum(CRICKET_VIEWS).catch('match'),
   title: z.string().max(40),
   batting: playerName,
   bowling: playerName,
@@ -189,6 +200,37 @@ export const cricketSchema = z.object({
   bowler: z.object({ name: playerName, balls: count, runs: count, wickets: count }),
   /** Outcomes of the current over, oldest first: "0".."6", "W", "wd", "nb". */
   thisOver: z.array(z.string().max(3)).max(14),
+
+  // Added with live scores; the defaults keep scenes saved before then valid.
+  /** manual: the host taps each ball. live: the host's studio copies a real match into this innings. */
+  source: z.enum(['manual', 'live']).default('manual'),
+  /** The feed's ids for the match being followed. */
+  liveMatch: z.object({ league: z.string().max(20), event: z.string().max(20) }).nullable().default(null),
+  /** Live only: where the match stands, e.g. "IND need 165 from 118 balls". */
+  status: z.string().max(80).default(''),
+  /** Live only: the other side's score, e.g. "WI 171 (19.1 ov)". */
+  other: z.string().max(40).default(''),
+  /** Live only: the batting card of this innings, in batting order. */
+  card: z
+    .array(z.object({ name: playerName, how: z.string().max(40), runs: count, balls: count }))
+    .max(11)
+    .default([]),
+  /** Live only: the bowlers used in this innings. */
+  attack: z
+    .array(z.object({ name: playerName, overs: z.string().max(6), runs: count, wickets: count }))
+    .max(8)
+    .default([]),
+  /** Live only: runs and wickets in each over of this innings, for the over-by-over chart. */
+  overs: z
+    .array(z.object({ over: count, runs: count, wickets: z.number().int().min(0).max(10) }))
+    .max(50)
+    .default([]),
+  /** Live only: the unbroken stand between the two batters at the crease. */
+  partnership: z.object({ runs: count, balls: count }).nullable().default(null),
+  /** Live only: the total the batting side is heading for at this rate (first innings). */
+  projected: count.nullable().default(null),
+  /** Live only: team colours, batting side first; null draws both in the brand colour. */
+  colors: z.tuple([hexColor, hexColor]).nullable().default(null),
 });
 export type Cricket = z.infer<typeof cricketSchema>;
 
@@ -209,6 +251,17 @@ export const DEFAULT_CRICKET: Cricket = {
   striker: 0,
   bowler: { name: 'Bowler', balls: 0, runs: 0, wickets: 0 },
   thisOver: [],
+  // A new cricket scene follows a real match; scenes saved before live scores stay hand-scored.
+  source: 'live',
+  liveMatch: null,
+  status: '',
+  other: '',
+  card: [],
+  attack: [],
+  overs: [],
+  partnership: null,
+  projected: null,
+  colors: null,
 };
 
 // ---------- Celebrations ----------

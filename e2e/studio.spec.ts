@@ -120,6 +120,8 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await page.getByTestId('tab-scenes').click();
   await page.getByTestId('template-cricket').click();
   await page.getByTestId('tab-template').click();
+  // A new cricket scene follows a live match; this test scores by hand.
+  await page.getByTestId('cricket-source-manual').click();
   await page.getByTestId('ball-4').click();
   await page.getByTestId('ball-W').click();
   await expect(page.getByTestId('cricket-score')).toContainText('4/1');

@@ -1,6 +1,10 @@
 import { APP_NAME } from '@studio/shared';
 import { Button, Icon, IconButton, TextField } from '@studio/ui';
+import { LocalVideoTrack } from 'livekit-client';
 import { useEffect, useRef, useState } from 'react';
+import { useToast } from '../lib/app-context';
+import { applyCameraEffect, useEffectsSupported, useStoredCameraEffect, useStoredMicPrefs, useTrackEffect } from './camera-effects';
+import { EffectPicker, MicLevel, MicOptions } from './device-menus';
 import { DeviceSelect } from './dialogs';
 import type { JoinOptions } from './useStudioRoom';
 
@@ -27,10 +31,27 @@ export function GreenRoom({ title, askName, busy, onJoin }: Props) {
   // make the studio open the camera while this preview is still opening it, and one of them loses.
   const [settled, setSettled] = useState(false);
   const preview = useRef<MediaStream | null>(null);
+  // The preview camera wrapped as a LiveKit track, which is what camera effects attach to.
+  const [previewTrack, setPreviewTrack] = useState<LocalVideoTrack | null>(null);
+  const wrapped = useRef<LocalVideoTrack | null>(null);
+
+  const toast = useToast();
+  const [effect, setEffect] = useStoredCameraEffect();
+  const effectsSupported = useEffectsSupported();
+  const [micPrefs, setMicPrefs] = useStoredMicPrefs();
+  useTrackEffect(previewTrack, effect, setEffect, (err) => toast.error(err));
 
   const releasePreview = () => {
+    const track = wrapped.current;
+    wrapped.current = null;
+    if (track) {
+      track.detach();
+      // The camera itself is let go at once below; the effect is torn down behind it.
+      void applyCameraEffect(track, { kind: 'none' }).catch(() => undefined);
+    }
     preview.current?.getTracks().forEach((t) => t.stop());
     preview.current = null;
+    setPreviewTrack(null);
   };
 
   useEffect(() => {
@@ -43,7 +64,7 @@ export function GreenRoom({ title, askName, busy, onJoin }: Props) {
     navigator.mediaDevices
       ?.getUserMedia({
         video: camera ? (cameraId ? { deviceId: { exact: cameraId } } : true) : false,
-        audio: mic ? (micId ? { deviceId: { exact: micId } } : true) : false,
+        audio: mic ? { ...micPrefs, ...(micId ? { deviceId: { exact: micId } } : {}) } : false,
       })
       .then(
         (media) => {
@@ -51,7 +72,13 @@ export function GreenRoom({ title, askName, busy, onJoin }: Props) {
           preview.current = media;
           setBlocked(false);
           setGranted(true);
-          if (videoRef.current) videoRef.current.srcObject = camera ? media : null;
+          const [video] = media.getVideoTracks();
+          if (video && videoRef.current) {
+            const track = new LocalVideoTrack(video, undefined, true);
+            wrapped.current = track;
+            track.attach(videoRef.current);
+            setPreviewTrack(track);
+          }
         },
         () => !cancelled && setBlocked(true),
       )
@@ -60,7 +87,7 @@ export function GreenRoom({ title, askName, busy, onJoin }: Props) {
       cancelled = true;
       releasePreview();
     };
-  }, [camera, mic, cameraId, micId]);
+  }, [camera, mic, cameraId, micId, micPrefs]);
 
   const join = () => {
     releasePreview();
@@ -116,6 +143,14 @@ export function GreenRoom({ title, askName, busy, onJoin }: Props) {
           <>
             <DeviceSelect kind="videoinput" label="Camera" value={cameraId} onValue={setCameraId} refreshKey={granted} />
             <DeviceSelect kind="audioinput" label="Microphone" value={micId} onValue={setMicId} refreshKey={granted} />
+            {mic && <MicLevel getTrack={() => preview.current?.getAudioTracks()[0]} />}
+            <details className="more-options">
+              <summary className="label-large" data-testid="green-room-options">Background and sound options</summary>
+              <div className="col" style={{ gap: 16, paddingTop: 12 }}>
+                {camera && <EffectPicker effect={effect} onChange={setEffect} supported={effectsSupported} onError={(err) => toast.error(err)} />}
+                <MicOptions prefs={micPrefs} onChange={setMicPrefs} />
+              </div>
+            </details>
           </>
         )}
         <div>

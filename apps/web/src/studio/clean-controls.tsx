@@ -6,7 +6,11 @@ import {
   type LayoutStyle,
   type Scene,
 } from '@studio/shared';
-import { Button, Icon, Slider, Switch } from '@studio/ui';
+import { Button, Icon, IconButton, Slider, Spinner, Switch } from '@studio/ui';
+import { useState } from 'react';
+import { api } from '../lib/api';
+import { useToast } from '../lib/app-context';
+import { BACKDROPS, backdropFile, backdropUrl } from './backdrops';
 import { LayoutThumb } from './LayoutThumb';
 
 type SceneUpdater = (change: (scene: Scene) => Scene) => void;
@@ -61,8 +65,69 @@ function Choice<T extends string>({ label, value, options, onChange }: ChoicePro
 const units = (v: number) => (v === 0 ? 'None' : v.toFixed(1));
 const percent = (v: number) => `${Math.round(v * 100)}%`;
 
+/**
+ * The picture behind the tiles. It is the same background the Brand tab sets, so every viewer
+ * and the stream see it; a built-in picture is uploaded like any other.
+ */
+function BackgroundPicture({ broadcastId, scene, update }: { broadcastId: string; scene: Scene; update: SceneUpdater }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const current = scene.brand.backgroundUrl;
+  const setBackground = (backgroundUrl: string | null) => update((s) => ({ ...s, brand: { ...s.brand, backgroundUrl } }));
+
+  const upload = async (file: File | Promise<File> | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await api.uploadAsset(broadcastId, await file);
+      setBackground(url);
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="col" style={{ gap: 8 }}>
+      <span className="body-medium">Background picture</span>
+      <div className="row">
+        {current ? (
+          <img className="brand-preview" src={current} alt="Background preview" data-testid="background-preview" />
+        ) : (
+          <div className="brand-preview center"><Icon name="wallpaper" /></div>
+        )}
+        <label className="file-button grow">
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} data-testid="background-upload" />
+          <span className="label-large">{current ? 'Replace' : 'Upload'}</span>
+        </label>
+        {busy && <Spinner size={24} />}
+        {current && !busy && <IconButton icon="delete" label="Remove background picture" onClick={() => setBackground(null)} data-testid="background-remove" />}
+      </div>
+      <div className="effect-grid" role="group" aria-label="Built-in backgrounds">
+        {BACKDROPS.map((backdrop) => (
+          <button
+            key={backdrop.id}
+            type="button"
+            className="effect-tile"
+            title={backdrop.label}
+            aria-label={backdrop.label}
+            disabled={busy}
+            data-testid={`background-${backdrop.id}`}
+            onClick={() => void upload(backdropFile(backdrop.id))}
+          >
+            <img src={backdropUrl(backdrop.id, 160, 90)!} alt="" />
+            <span className="label-medium effect-name">{backdrop.label}</span>
+          </button>
+        ))}
+      </div>
+      <p className="body-small muted">The picture fills the frame behind the tiles. Add a margin around the frame to see more of it.</p>
+    </div>
+  );
+}
+
 /** The Layout page: every layout as a picture, and every knob that shapes the frame. */
-export function CleanControls({ scene, update }: { scene: Scene; update: SceneUpdater }) {
+export function CleanControls({ broadcastId, scene, update }: { broadcastId: string; scene: Scene; update: SceneUpdater }) {
   const { style, layout } = scene;
   const set = (patch: Partial<LayoutStyle>) => update((s) => ({ ...s, style: { ...s.style, ...patch } }));
   const customised = JSON.stringify(style) !== JSON.stringify(DEFAULT_STYLE);
@@ -185,7 +250,7 @@ export function CleanControls({ scene, update }: { scene: Scene; update: SceneUp
           ]}
           onChange={(backdrop) => set({ backdrop })}
         />
-        <p className="body-small muted">For a picture behind the tiles, upload a background in the Brand tab.</p>
+        <BackgroundPicture broadcastId={broadcastId} scene={scene} update={update} />
       </section>
 
       <section className="col">

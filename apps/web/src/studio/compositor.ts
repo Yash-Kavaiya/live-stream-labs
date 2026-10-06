@@ -1,6 +1,7 @@
 import {
   bannerInSlot,
   computeSceneLayout,
+  cricketOwnsLayout,
   CRICKET_STRIP,
   Fade,
   fitRect,
@@ -23,7 +24,7 @@ import {
 } from '@studio/shared';
 import { drawBadge, drawCta, drawHeadline, drawLowerThird, drawNameTitle, drawSocial, drawTicker, drawTitleCard } from './graphics/banners';
 import { CELEBRATION_MS, drawCelebration } from './graphics/celebration';
-import { drawCricketDashboard, drawCricketStrip } from './graphics/cricket';
+import { drawCricketBug, drawCricketCard, drawCricketDashboard, drawCricketSplit, drawCricketStrip } from './graphics/cricket';
 import { drawNews } from './graphics/news';
 import { drawPill, ellipsize, FONT, readableOn, wrapText, type Painter } from './graphics/painter';
 
@@ -471,6 +472,12 @@ export class Compositor {
       drawPill(this.painter, unit * 3, unit * 3, 'WATCH PARTY', scene.brand.color, readableOn(scene.brand.color), now);
     } else if (template === 'cricket' && scene.cricket.view === 'dashboard') {
       drawCricketDashboard(this.painter, scene, news.sideOccupied || scene.stage.length > 0);
+    } else if (template === 'cricket' && scene.cricket.view === 'card') {
+      drawCricketCard(this.painter, scene, news.sideOccupied || scene.stage.length > 0);
+    } else if (template === 'cricket' && scene.cricket.view === 'split') {
+      drawCricketSplit(this.painter, scene);
+    } else if (template === 'cricket' && scene.cricket.view === 'bug') {
+      drawCricketBug(this.painter, scene);
     } else if (template === 'cricket') {
       drawCricketStrip(this.painter, scene);
       // Banners, the ticker and comments sit above the strip.
@@ -511,7 +518,7 @@ export class Compositor {
     // The news room and the cricket dashboard have no free space at the bottom for banners; the
     // news room shows a lower third as its headline instead. Tickers and top banners still run.
     const bottomTaken =
-      scene.template === 'newsroom' || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
+      scene.template === 'newsroom' || (scene.template === 'cricket' && cricketOwnsLayout(scene.cricket.view));
     // Templates with their own furniture along the top push top banners below it.
     const topOffset = scene.template === 'newsroom' ? unit * 9 : scene.template === 'watchparty' ? unit * 6 : 0;
     const slot = (name: BannerSlot, hidden = false) => this.banners[name].step(hidden ? null : bannerInSlot(scene, name), dt);

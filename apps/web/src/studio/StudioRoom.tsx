@@ -1,5 +1,6 @@
 import {
   addToStage,
+  cricketOwnsLayout,
   promoteOnStage,
   removeFromStage,
   sourceId,
@@ -13,13 +14,16 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth, useLoad, useToast } from '../lib/app-context';
 import { formatDuration } from '../lib/format';
-import { DestinationsDialog, InviteDialog, PlatformBadge, SettingsDialog } from './dialogs';
+import { applyMicPrefs, useEffectsSupported, useLocalCamera, useStoredCameraEffect, useStoredMicPrefs, useTrackEffect, type MicPrefs } from './camera-effects';
+import { OptionsCaret, Popover } from './device-menus';
+import { CameraSettings, DestinationsDialog, InviteDialog, MicSettings, PlatformBadge, SettingsDialog } from './dialogs';
 import { shareVideoClip, useAutoDirector, useComments, useElapsed, useSceneController } from './hooks';
 import { BannersPanel } from './banners-panel';
 import { BrandPanel, ChatPanel, CommentsPanel, ScenesPanel } from './panels';
 import { LayoutPicker } from './LayoutThumb';
 import { ProgramCanvas, SourceTile } from './stage';
 import { TEMPLATE_PAGES, TemplatePage } from './template-panels';
+import { useLiveCricket } from './live-cricket';
 import { useLiveControl } from './useLiveControl';
 import { useDrawableSources, useStudioRoom, type JoinOptions } from './useStudioRoom';
 
@@ -79,7 +83,20 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
   const [panel, setPanel] = useState<PanelId>(isHost ? 'scenes' : 'chat');
   const [dialog, setDialog] = useState<'invite' | 'destinations' | 'settings' | null>(null);
+  const [menu, setMenu] = useState<'mic' | 'camera' | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const micCaret = useRef<HTMLButtonElement>(null);
+  const cameraCaret = useRef<HTMLButtonElement>(null);
   const stopClip = useRef<(() => void) | null>(null);
+
+  const [effect, setEffect] = useStoredCameraEffect();
+  const effectsSupported = useEffectsSupported();
+  useTrackEffect(useLocalCamera(room), effect, setEffect, (err) => toast.error(err));
+  const [micPrefs, storeMicPrefs] = useStoredMicPrefs();
+  const setMicPrefs = (prefs: MicPrefs) => {
+    storeMicPrefs(prefs);
+    if (room) void applyMicPrefs(room, prefs).catch((err) => toast.error(err));
+  };
 
   const me = view.participants.find((p) => p.isLocal);
   const myScreen = view.sources.find((s) => s.isLocal && s.kind === 'screen');
@@ -94,6 +111,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
   }, [isHost, studio.status, hostScene.stage.length, session.identity, updateScene]);
 
   useAutoDirector(hostScene, updateScene, view.sources, isHost && studio.status === 'connected');
+  const liveScore = useLiveCricket(hostScene, updateScene, isHost);
 
   // Take sources off the stage once they are gone (guest left, screen share stopped). The delay
   // rides out the moment after connecting when remote tracks are not listed yet.
@@ -194,7 +212,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
     ...FIXED_TABS,
   ];
   const templateOwnsLayout =
-    scene.template === 'newsroom' || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
+    scene.template === 'newsroom' || (scene.template === 'cricket' && cricketOwnsLayout(scene.cricket.view));
 
   return (
     <div className="studio" data-testid="studio" data-status={studio.status}>
@@ -229,7 +247,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
               )}
             </button>
             <Button variant="tonal" icon="person_add" onClick={() => setDialog('invite')} data-testid="invite">
-              Invite
+              <span className="wide-only">Invite</span>
             </Button>
             {isLive || live.phase === 'ending' ? (
               <Button danger icon="stop_circle" onClick={() => void live.end()} disabled={live.phase === 'ending'} data-testid="end-stream">
@@ -246,6 +264,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
       <div className="studio-body">
         <section className="studio-main">
+          <div className="studio-scroll">
           <div className="stage-frame">
             <ProgramCanvas scene={scene} drawables={drawables} canvasRef={canvasRef} />
             {studio.status === 'connecting' && (
@@ -263,7 +282,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
             <div className="row wrap" style={{ justifyContent: 'space-between' }}>
               {templateOwnsLayout ? (
                 <span className="chip">
-                  <Icon name="dashboard_customize" /> Layout is set by the {scene.template === 'newsroom' ? 'news scene' : 'match dashboard'}
+                  <Icon name="dashboard_customize" /> Layout is set by the {scene.template === 'newsroom' ? 'news scene' : 'cricket layout'}
                 </span>
               ) : (
                 <LayoutPicker value={scene.layout} style={scene.style} onChange={(layout) => updateScene((s) => ({ ...s, layout }))} />
@@ -311,10 +330,18 @@ export function StudioRoom({ session, join, onExit }: Props) {
               </div>
             )}
           </div>
+          </div>
 
-          <div className="control-bar" role="toolbar" aria-label="Your controls">
-            <IconButton icon={me?.micMuted ? 'mic_off' : 'mic'} label={me?.micMuted ? 'Turn microphone on' : 'Turn microphone off'} variant={me?.micMuted ? 'filled' : 'tonal'} onClick={() => void toggle('mic')} data-testid="toggle-mic" />
-            <IconButton icon={me?.cameraOff ? 'videocam_off' : 'videocam'} label={me?.cameraOff ? 'Turn camera on' : 'Turn camera off'} variant={me?.cameraOff ? 'filled' : 'tonal'} onClick={() => void toggle('camera')} data-testid="toggle-camera" />
+          {/* Outside the scrolling area, so the bar never sits on top of a backstage tile. */}
+          <div className="control-bar" role="toolbar" aria-label="Your controls" data-testid="control-bar">
+            <span className="control-group">
+              <IconButton icon={me?.micMuted ? 'mic_off' : 'mic'} label={me?.micMuted ? 'Turn microphone on' : 'Turn microphone off'} variant={me?.micMuted ? 'filled' : 'tonal'} onClick={() => void toggle('mic')} data-testid="toggle-mic" />
+              <OptionsCaret ref={micCaret} label="Microphone options" open={menu === 'mic'} onClick={() => setMenu(menu === 'mic' ? null : 'mic')} data-testid="mic-options" />
+            </span>
+            <span className="control-group">
+              <IconButton icon={me?.cameraOff ? 'videocam_off' : 'videocam'} label={me?.cameraOff ? 'Turn camera on' : 'Turn camera off'} variant={me?.cameraOff ? 'filled' : 'tonal'} onClick={() => void toggle('camera')} data-testid="toggle-camera" />
+              <OptionsCaret ref={cameraCaret} label="Camera options" open={menu === 'camera'} onClick={() => setMenu(menu === 'camera' ? null : 'camera')} data-testid="camera-options" />
+            </span>
             <IconButton icon={myScreen ? 'cancel_presentation' : 'present_to_all'} label={myScreen ? 'Stop sharing screen' : 'Share screen'} variant={myScreen ? 'filled' : 'tonal'} onClick={() => void toggle('screen')} data-testid="toggle-screen" />
             {isHost && (
               <>
@@ -335,16 +362,26 @@ export function StudioRoom({ session, join, onExit }: Props) {
             <IconButton icon="settings" label="Camera and microphone settings" variant="tonal" onClick={() => setDialog('settings')} />
             <span className="control-divider" />
             <Button variant="text" danger icon="logout" onClick={() => void leave()} data-testid="leave">
-              Leave
+              <span className="label">Leave</span>
             </Button>
           </div>
+          {room && (
+            <>
+              <Popover open={menu === 'mic'} onClose={closeMenu} anchor={micCaret} label="Microphone" data-testid="mic-menu">
+                <MicSettings room={room} micPrefs={micPrefs} onMicPrefs={setMicPrefs} />
+              </Popover>
+              <Popover open={menu === 'camera'} onClose={closeMenu} anchor={cameraCaret} label="Camera" data-testid="camera-menu">
+                <CameraSettings room={room} effect={effect} onEffect={setEffect} effectsSupported={effectsSupported} />
+              </Popover>
+            </>
+          )}
         </section>
 
         <aside className="studio-side">
           {isHost ? <Tabs<PanelId> tabs={hostTabs} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
           <div className="studio-panel">
             {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} onOpenPage={() => setPanel('template')} />}
-            {panel === 'template' && <TemplatePage scene={scene} update={updateScene} />}
+            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} liveScore={liveScore} />}
             {panel === 'comments' && <CommentsPanel comments={comments} scene={scene} update={updateScene} />}
             {panel === 'banners' && <BannersPanel scene={scene} update={updateScene} />}
             {panel === 'brand' && <BrandPanel broadcastId={broadcastId} scene={scene} update={updateScene} />}
@@ -361,7 +398,18 @@ export function StudioRoom({ session, join, onExit }: Props) {
           )}
         </>
       )}
-      {room && <SettingsDialog room={room} open={dialog === 'settings'} onClose={() => setDialog(null)} />}
+      {room && (
+        <SettingsDialog
+          room={room}
+          micPrefs={micPrefs}
+          onMicPrefs={setMicPrefs}
+          effect={effect}
+          onEffect={setEffect}
+          effectsSupported={effectsSupported}
+          open={dialog === 'settings'}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </div>
   );
 }

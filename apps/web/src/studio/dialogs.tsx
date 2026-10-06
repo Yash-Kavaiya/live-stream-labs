@@ -1,10 +1,12 @@
 import { PLATFORMS, type BroadcastDto, type DestinationDto, type InviteDto } from '@studio/shared';
 import { Button, Checkbox, Dialog, EmptyState, IconButton, Select, Spinner, TextField } from '@studio/ui';
-import { Room } from 'livekit-client';
+import { Room, Track } from 'livekit-client';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useLoad, useToast } from '../lib/app-context';
+import type { CameraEffect, MicPrefs } from './camera-effects';
+import { EffectPicker, MicLevel, MicOptions } from './device-menus';
 
 export function PlatformBadge({ platform, size = 32 }: { platform: DestinationDto['platform']; size?: number }) {
   const info = PLATFORMS[platform];
@@ -179,15 +181,57 @@ export function DeviceSelect({
       label={label}
       value={current}
       onValue={onValue}
+      floatingMenu
       options={devices.map((d, i) => ({ value: d.deviceId, label: d.label || `${label} ${i + 1}` }))}
     />
   );
 }
 
-export function SettingsDialog({ room, open, onClose }: { room: Room; open: boolean; onClose(): void }) {
+/** The room's current microphone track, read fresh each time because restarts replace it. */
+export const micTrackOf = (room: Room) => () =>
+  room.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack?.mediaStreamTrack;
+
+export interface DeviceSettings {
+  room: Room;
+  micPrefs: MicPrefs;
+  onMicPrefs(prefs: MicPrefs): void;
+  effect: CameraEffect;
+  onEffect(effect: CameraEffect): void;
+  effectsSupported: boolean;
+}
+
+export function useSwitchDevice(room: Room) {
   const toast = useToast();
-  const switchTo = (kind: MediaDeviceKind) => (id: string) =>
-    void room.switchActiveDevice(kind, id).catch((err) => toast.error(err));
+  return (kind: MediaDeviceKind) => (id: string) => void room.switchActiveDevice(kind, id).catch((err) => toast.error(err));
+}
+
+/** Everything about the microphone: which one, the speakers, and how the sound is cleaned up. */
+export function MicSettings({ room, micPrefs, onMicPrefs, refreshKey }: Pick<DeviceSettings, 'room' | 'micPrefs' | 'onMicPrefs'> & { refreshKey?: unknown }) {
+  const switchTo = useSwitchDevice(room);
+  return (
+    <>
+      <DeviceSelect kind="audioinput" label="Microphone" value={room.getActiveDevice('audioinput') ?? ''} onValue={switchTo('audioinput')} refreshKey={refreshKey} />
+      <MicLevel getTrack={micTrackOf(room)} />
+      <DeviceSelect kind="audiooutput" label="Speakers" value={room.getActiveDevice('audiooutput') ?? ''} onValue={switchTo('audiooutput')} refreshKey={refreshKey} />
+      <MicOptions prefs={micPrefs} onChange={onMicPrefs} />
+    </>
+  );
+}
+
+/** Everything about the camera: which one, and what is behind the person. */
+export function CameraSettings({ room, effect, onEffect, effectsSupported, refreshKey }: Pick<DeviceSettings, 'room' | 'effect' | 'onEffect' | 'effectsSupported'> & { refreshKey?: unknown }) {
+  const toast = useToast();
+  const switchTo = useSwitchDevice(room);
+  return (
+    <>
+      <DeviceSelect kind="videoinput" label="Camera" value={room.getActiveDevice('videoinput') ?? ''} onValue={switchTo('videoinput')} refreshKey={refreshKey} />
+      <span className="body-medium">Background</span>
+      <EffectPicker effect={effect} onChange={onEffect} supported={effectsSupported} onError={(err) => toast.error(err)} />
+    </>
+  );
+}
+
+export function SettingsDialog({ open, onClose, ...settings }: DeviceSettings & { open: boolean; onClose(): void }) {
   return (
     <Dialog
       open={open}
@@ -196,9 +240,8 @@ export function SettingsDialog({ room, open, onClose }: { room: Room; open: bool
       icon="settings"
       actions={<Button variant="text" onClick={onClose}>Done</Button>}
     >
-      <DeviceSelect kind="videoinput" label="Camera" value={room.getActiveDevice('videoinput') ?? ''} onValue={switchTo('videoinput')} refreshKey={open} />
-      <DeviceSelect kind="audioinput" label="Microphone" value={room.getActiveDevice('audioinput') ?? ''} onValue={switchTo('audioinput')} refreshKey={open} />
-      <DeviceSelect kind="audiooutput" label="Speakers" value={room.getActiveDevice('audiooutput') ?? ''} onValue={switchTo('audiooutput')} refreshKey={open} />
+      <CameraSettings {...settings} refreshKey={open} />
+      <MicSettings {...settings} refreshKey={open} />
     </Dialog>
   );
 }

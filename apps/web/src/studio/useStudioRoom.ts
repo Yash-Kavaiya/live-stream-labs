@@ -19,6 +19,7 @@ import {
   type RemoteTrack,
 } from 'livekit-client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { loadMicPrefs } from './camera-effects';
 import type { DrawableSource } from './compositor';
 import { readRoom, type RoomView, type StudioSource } from './sources';
 
@@ -129,7 +130,10 @@ export function useStudioRoom(session: StudioSession, join: JoinOptions): Studio
       adaptiveStream: false,
       dynacast: true,
       videoCaptureDefaults: { resolution: VideoPresets.h720.resolution, deviceId: join.cameraId },
-      audioCaptureDefaults: { deviceId: join.micId, echoCancellation: true, noiseSuppression: true },
+      audioCaptureDefaults: { deviceId: join.micId, ...loadMicPrefs() },
+      // Above LiveKit's default for 720p: a blurred or replaced background has soft gradients and
+      // a moving edge around the person, which break up into blocks at a low bitrate.
+      publishDefaults: { videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 } },
     });
     const bump = () => setVersion((n) => n + 1);
 

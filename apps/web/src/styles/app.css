@@ -124,7 +124,9 @@
 .studio-back:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
 
 .studio-body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; padding: 0 12px 12px; min-height: 0; }
-.studio-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: auto; padding: 16px; background: var(--md-sys-color-surface); border-radius: var(--md-sys-shape-corner-extra-large); }
+.studio-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--md-sys-color-surface); border-radius: var(--md-sys-shape-corner-extra-large); }
+/* Everything above the control bar scrolls; the bar itself stays put below it. */
+.studio-scroll { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; padding: 16px; }
 .studio-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--md-sys-color-surface); border-radius: var(--md-sys-shape-corner-extra-large); }
 .studio-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
@@ -143,7 +145,7 @@
 .program-canvas { display: block; width: 100%; height: 100%; }
 .stage-overlay { position: absolute; inset: 0; color: #c4c7c5; }
 
-.backstage { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 280px)); gap: 12px; }
+.backstage { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 280px)); gap: 12px; }
 .source-tile { border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-surface-container); outline: 2px solid transparent; transition: outline-color 0.2s var(--app-motion-standard); }
 .source-tile.on-stage { background: var(--md-sys-color-primary-container); }
 .source-tile.speaking { outline-color: var(--app-success); }
@@ -154,8 +156,33 @@
 .source-muted md-icon { --md-icon-size: 18px; }
 .source-meta { display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 12px; min-height: 48px; }
 
-.control-bar { position: sticky; bottom: 0; z-index: 2; box-shadow: var(--app-elevation-2); display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: auto; padding: 8px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-surface-container); align-self: center; }
+.control-bar { flex: none; z-index: 2; box-shadow: var(--app-elevation-2); display: flex; align-items: center; justify-content: center; gap: 12px; max-width: calc(100% - 24px); margin: 4px 12px 12px; padding: 8px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-surface-container); align-self: center; }
 .control-divider { width: 1px; height: 24px; background: var(--md-sys-color-outline-variant); }
+
+/* A control-bar button with the arrow that opens its options. */
+.control-group { display: inline-flex; align-items: center; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-surface-container-highest); }
+.control-caret { display: grid; place-items: center; width: 28px; height: 40px; margin-left: -2px; padding: 0 4px 0 0; border: 0; border-radius: 0 20px 20px 0; background: transparent; color: var(--md-sys-color-on-surface-variant); cursor: pointer; }
+.control-caret:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.control-caret:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+.control-caret md-icon { --md-icon-size: 20px; }
+
+.popover { position: fixed; left: var(--popover-left); bottom: var(--popover-bottom); z-index: 20; gap: 12px; max-width: calc(100vw - 16px); max-height: calc(100dvh - var(--popover-bottom) - 16px); overflow-y: auto; padding: 16px; border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); box-shadow: var(--app-elevation-2); }
+
+.mic-level { height: 6px; overflow: hidden; border-radius: 3px; background: var(--md-sys-color-surface-container-highest); }
+.mic-level-bar { height: 100%; transform: scaleX(0); transform-origin: left; background: var(--app-success); }
+
+.effect-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.effect-tile { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; padding: 0; border: 0; border-radius: var(--md-sys-shape-corner-small); outline: 2px solid transparent; outline-offset: 1px; background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant); cursor: pointer; }
+.effect-tile:hover { outline-color: var(--md-sys-color-outline); }
+.effect-tile[aria-pressed='true'] { outline-color: var(--md-sys-color-primary); }
+.effect-tile:focus-visible, .effect-tile:focus-within { outline-color: var(--md-sys-color-primary); }
+.effect-tile:disabled { opacity: 0.5; cursor: default; }
+.effect-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.effect-tile input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.effect-tile md-icon { margin-bottom: 14px; }
+.effect-name { position: absolute; inset: auto 0 0; padding: 2px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgb(0 0 0 / 0.55); color: #fff; text-align: center; }
+
+.more-options summary { cursor: pointer; color: var(--md-sys-color-primary); }
 
 .icon-file { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); cursor: pointer; }
 .icon-file:hover { box-shadow: var(--app-elevation-1); }
@@ -197,19 +224,54 @@
 .chat-message { display: flex; flex-direction: column; gap: 2px; width: fit-content; max-width: 88%; margin-bottom: 8px; padding: 8px 12px; border-radius: 16px 16px 16px 4px; background: var(--md-sys-color-surface-container-high); overflow-wrap: anywhere; }
 .chat-message.mine { margin-left: auto; border-radius: 16px 16px 4px 16px; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
 
+/* Tablet and phone: one column that scrolls as a page, with the controls fixed to the bottom. */
 @media (max-width: 960px) {
-  .studio { height: auto; min-height: 100%; }
-  .studio-body { grid-template-columns: 1fr; }
-  .studio-main { overflow: visible; }
+  .studio { height: auto; min-height: 100%; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .studio-body { grid-template-columns: minmax(0, 1fr); }
+  .studio-main, .studio-scroll { overflow: visible; }
   .studio-side { min-height: 420px; }
-  .stage-frame { width: 100%; }
+  .stage-frame { width: 100%; min-width: 0; }
   .studio-top { flex-wrap: wrap; }
+  .control-bar { position: fixed; left: 0; right: 0; bottom: 0; max-width: none; margin: 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-radius: var(--md-sys-shape-corner-large) var(--md-sys-shape-corner-large) 0 0; }
+}
+
+@media (max-width: 600px) {
+  .studio-top { gap: 8px; padding: 8px 12px; }
+  .studio-top .wide-only { display: none; }
+  .studio-body { gap: 8px; padding: 0 8px 8px; }
+  .studio-scroll { padding: 12px; }
+  .studio-main, .studio-side { border-radius: var(--md-sys-shape-corner-large); }
+
+  /* Layouts and backstage tiles become rows that swipe sideways rather than tall stacks. */
+  .layout-strip { flex-wrap: nowrap; overflow-x: auto; margin-inline: -12px; padding: 2px 12px; scrollbar-width: none; }
+  .layout-chip { flex: none; }
+  .backstage { display: flex; overflow-x: auto; margin-inline: -12px; padding: 2px 12px; scroll-snap-type: x proximity; }
+  .backstage > * { flex: 0 0 min(70vw, 260px); scroll-snap-align: start; }
+
+  .control-bar { gap: 6px; justify-content: space-evenly; }
+  .control-bar .control-divider { display: none; }
+  .control-bar md-text-button .label { display: none; }
+  .control-bar md-icon-button, .control-bar md-filled-icon-button, .control-bar md-filled-tonal-icon-button { width: 44px; height: 44px; }
+  .control-caret, .icon-file { height: 44px; }
+  .icon-file { width: 44px; }
+
+  /* Options open as a sheet across the bottom, above the control bar. */
+  .popover { left: 8px; right: 8px; bottom: calc(72px + env(safe-area-inset-bottom)); width: auto !important; max-height: calc(100dvh - 96px); }
+
+  .green-room { padding: 12px; gap: 16px; }
+  .layout-gallery { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 380px) {
+  .control-bar { gap: 2px; padding-inline: 4px; }
+  .control-caret { width: 22px; padding: 0; }
 }
 
 /* Five tabs share the side panel. */
 .studio-side md-primary-tab { min-width: 0; --md-primary-tab-label-text-size: 0.75rem; }
 
 .screen-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.screen-grid.five { grid-template-columns: repeat(5, 1fr); }
 .banner-styles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .banner-styles .label-medium { text-align: center; line-height: 1.15; }
 .screen-button { display: grid; justify-items: center; gap: 4px; padding: 10px 2px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; transition: background 0.2s var(--app-motion-standard); }

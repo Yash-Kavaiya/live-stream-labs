@@ -172,15 +172,17 @@ export interface SelectProps<T extends string> {
   onValue(value: T): void;
   options: { value: T; label: string }[];
   disabled?: boolean;
+  /** Set when the select sits in a scrolling or clipped container, so its menu is not cut off. */
+  floatingMenu?: boolean;
   style?: CSSProperties;
   'data-testid'?: string;
 }
 
-export function Select<T extends string>({ value, onValue, options, style, ...rest }: SelectProps<T>) {
+export function Select<T extends string>({ value, onValue, options, style, floatingMenu, ...rest }: SelectProps<T>) {
   const ref = useRef<HTMLElement & { value: string }>(null);
   useDomEvent(ref, 'change', () => onValue(ref.current!.value as T));
   return (
-    <md-outlined-select ref={ref} {...rest} value={value} style={{ width: '100%', ...style }}>
+    <md-outlined-select ref={ref} {...rest} value={value} menu-positioning={floatingMenu ? 'popover' : undefined} style={{ width: '100%', ...style }}>
       {options.map((option) => (
         <md-select-option key={option.value} value={option.value} selected={option.value === value ? true : undefined}>
           <div slot="headline">{option.label}</div>
@@ -190,13 +192,13 @@ export function Select<T extends string>({ value, onValue, options, style, ...re
   );
 }
 
-export function Switch({ selected, onChange, label, disabled }: { selected: boolean; onChange(selected: boolean): void; label: string; disabled?: boolean }) {
+export function Switch({ selected, onChange, label, disabled, 'data-testid': testId }: { selected: boolean; onChange(selected: boolean): void; label: string; disabled?: boolean; 'data-testid'?: string }) {
   const ref = useRef<HTMLElement & { selected: boolean }>(null);
   useDomEvent(ref, 'change', () => onChange(ref.current!.selected));
   return (
     <label className="row" style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
       <span className="body-large">{label}</span>
-      <md-switch ref={ref} selected={selected ? true : undefined} disabled={disabled ? true : undefined} />
+      <md-switch ref={ref} selected={selected ? true : undefined} disabled={disabled ? true : undefined} data-testid={testId} />
     </label>
   );
 }

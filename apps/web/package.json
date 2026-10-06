@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@livekit/track-processors": "^0.8.1",
     "@studio/shared": "*",
     "@studio/ui": "*",
     "livekit-client": "^2.22.3",

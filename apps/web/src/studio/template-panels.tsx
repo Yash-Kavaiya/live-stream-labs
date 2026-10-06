@@ -5,21 +5,30 @@ import {
   inningsOver,
   NEWS_VIEWS,
   recordBall,
+  CRICKET_VIEWS,
   type Ball,
   type Cricket,
+  type CricketView,
   type News,
   type NewsView,
   type Scene,
   type TemplateId,
 } from '@studio/shared';
-import { Button, Icon, TextField } from '@studio/ui';
-import { useState } from 'react';
+import { Button, Icon, Select, TextField } from '@studio/ui';
+import { useEffect, useState } from 'react';
+import { fetchMatches, pickDefaultMatch, type MatchRef } from '../lib/cricket-feed';
 import { CleanControls } from './clean-controls';
 
 type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 interface Props {
   scene: Scene;
   update: SceneUpdater;
+}
+
+/** How the live score feed is doing, for the cricket page to show. */
+export interface LiveScoreState {
+  updatedAt: number | null;
+  error: string | null;
 }
 
 // ---------- News room ----------
@@ -82,8 +91,68 @@ function NewsControls({ scene, update }: Props) {
 
 const BALL_LABELS: Record<string, string> = { W: 'W', wd: 'Wd', nb: 'Nb' };
 
-function CricketControls({ scene, update }: Props) {
+const CRICKET_VIEW_INFO: Record<CricketView, { label: string; icon: string; hint: string }> = {
+  match: { label: 'Strip', icon: 'videocam', hint: 'Cameras in your usual layout, with a score strip along the bottom.' },
+  bug: { label: 'Corner', icon: 'picture_in_picture', hint: 'Cameras fill the frame; a small score box sits in the top-left corner.' },
+  split: { label: 'Split', icon: 'vertical_split', hint: 'Cameras on the left, a tall score panel on the right.' },
+  dashboard: { label: 'Board', icon: 'scoreboard', hint: 'The full scoreboard, with cameras in a column at the side.' },
+  card: { label: 'Card', icon: 'table_rows', hint: 'The batting card and the bowlers, with cameras in a column at the side.' },
+};
+
+/** Chooses the real match the scoreboard follows. The list is fetched when this first shows. */
+function LiveMatchPicker({ cricket, set, liveScore }: { cricket: Cricket; set(patch: Partial<Cricket>): void; liveScore?: LiveScoreState }) {
+  const [matches, setMatches] = useState<MatchRef[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const chosen = cricket.liveMatch;
+
+  useEffect(() => {
+    const abort = new AbortController();
+    fetchMatches(abort.signal).then(
+      (list) => {
+        setMatches(list);
+        // Nothing chosen yet: follow the live India match if there is one.
+        const first = pickDefaultMatch(list);
+        if (!chosen && first) set({ liveMatch: { league: first.league, event: first.event } });
+      },
+      () => !abort.signal.aborted && setFailed(true),
+    );
+    return () => abort.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (failed) return <p className="body-medium" style={{ color: 'var(--md-sys-color-error)' }}>The match list could not be loaded. Check the internet connection and reopen this tab.</p>;
+  if (!matches) return <p className="body-medium muted">Loading matches…</p>;
+  if (matches.length === 0) return <p className="body-medium muted">No matches are listed right now.</p>;
+
+  const key = (m: { league: string; event: string }) => `${m.league}:${m.event}`;
+  const value = chosen && matches.some((m) => key(m) === key(chosen)) ? key(chosen) : key(matches[0]!);
+  return (
+    <>
+      <Select
+        label="Match"
+        value={value}
+        floatingMenu
+        onValue={(next) => {
+          const [league = '', event = ''] = next.split(':');
+          set({ liveMatch: { league, event } });
+        }}
+        options={matches.map((m) => ({ value: key(m), label: `${m.state === 'in' ? '● ' : ''}${m.title} · ${m.status}` }))}
+        data-testid="cricket-live-match"
+      />
+      <p className="body-small muted" data-testid="cricket-live-state">
+        {liveScore?.error
+          ? `The score feed could not be reached; the last score stays on screen. (${liveScore.error})`
+          : liveScore?.updatedAt
+            ? 'Following the match. The score refreshes every 5 seconds.'
+            : 'Connecting to the score feed…'}
+      </p>
+    </>
+  );
+}
+
+function CricketControls({ scene, update, liveScore }: Props & { liveScore?: LiveScoreState }) {
   const c = scene.cricket;
+  const live = c.source === 'live';
   const stats = cricketStats(c);
   const set = (patch: Partial<Cricket>) => update((s) => ({ ...s, cricket: { ...s.cricket, ...patch } }));
   const score = (ball: Ball) => update((s) => ({ ...s, cricket: recordBall(s.cricket, ball) }));
@@ -101,6 +170,7 @@ function CricketControls({ scene, update }: Props) {
       ...s,
       cricket: {
         ...DEFAULT_CRICKET,
+        source: 'manual',
         view: s.cricket.view,
         title: s.cricket.title,
         oversLimit: s.cricket.oversLimit,
@@ -113,14 +183,26 @@ function CricketControls({ scene, update }: Props) {
   return (
     <section className="col">
       <h3 className="title-small">Cricket match</h3>
-      <div className="segmented" role="group" aria-label="Cricket view" style={{ display: 'flex' }}>
-        <button type="button" className="grow" style={{ justifyContent: 'center' }} aria-pressed={c.view === 'match'} data-testid="cricket-match" onClick={() => set({ view: 'match' })}>
-          <Icon name="videocam" /> Match
+      <div className="screen-grid five" role="group" aria-label="Cricket layout">
+        {CRICKET_VIEWS.map((view) => (
+          <button key={view} type="button" className="screen-button" aria-pressed={c.view === view} data-testid={`cricket-${view}`} onClick={() => set({ view })}>
+            <Icon name={CRICKET_VIEW_INFO[view].icon} />
+            <span className="label-medium">{CRICKET_VIEW_INFO[view].label}</span>
+          </button>
+        ))}
+      </div>
+      <p className="body-small muted">{CRICKET_VIEW_INFO[c.view].hint}</p>
+
+      <h3 className="title-small">Score</h3>
+      <div className="segmented" role="group" aria-label="Where the score comes from" style={{ display: 'flex' }}>
+        <button type="button" className="grow" style={{ justifyContent: 'center' }} aria-pressed={live} data-testid="cricket-source-live" onClick={() => set({ source: 'live' })}>
+          <Icon name="sensors" /> Live match
         </button>
-        <button type="button" className="grow" style={{ justifyContent: 'center' }} aria-pressed={c.view === 'dashboard'} data-testid="cricket-dashboard" onClick={() => set({ view: 'dashboard' })}>
-          <Icon name="scoreboard" /> Dashboard
+        <button type="button" className="grow" style={{ justifyContent: 'center' }} aria-pressed={!live} data-testid="cricket-source-manual" onClick={() => set({ source: 'manual', status: '', other: '', card: [], attack: [], overs: [], partnership: null, projected: null, colors: null })}>
+          <Icon name="touch_app" /> Score by hand
         </button>
       </div>
+      {live && <LiveMatchPicker cricket={c} set={set} liveScore={liveScore} />}
 
       <div className="score-readout" data-testid="cricket-score">
         <span className="headline">
@@ -128,9 +210,12 @@ function CricketControls({ scene, update }: Props) {
         </span>
         <span className="body-medium muted">
           {stats.overs} ov · CRR {stats.runRate}
-          {stats.summary ? ` · ${stats.summary}` : ''}
+          {(live && c.status) || stats.summary ? ` · ${(live && c.status) || stats.summary}` : ''}
         </span>
       </div>
+
+      {!live && (
+        <>
 
       <div className="ball-pad" role="group" aria-label="Score a ball">
         {BALLS.map((ball) => (
@@ -178,7 +263,7 @@ function CricketControls({ scene, update }: Props) {
         <Button variant="outlined" icon="flag" onClick={startChase} data-testid="cricket-chase">
           Start the chase
         </Button>
-        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, view: c.view })}>
+        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, source: 'manual', view: c.view })}>
           Reset
         </Button>
       </div>
@@ -186,6 +271,8 @@ function CricketControls({ scene, update }: Props) {
         Tap a ball to score it. Start the chase swaps the teams and sets the target to one more than
         this total.
       </p>
+        </>
+      )}
     </section>
   );
 }
@@ -234,7 +321,7 @@ export const TEMPLATE_PAGES: Record<TemplateId, { label: string; icon: string }>
 };
 
 /** The page of controls for whichever template is active. The clean look's page is the layout designer. */
-export function TemplatePage(props: Props) {
+export function TemplatePage(props: Props & { broadcastId: string; liveScore?: LiveScoreState }) {
   switch (props.scene.template) {
     case 'none':
       return <CleanControls {...props} />;
