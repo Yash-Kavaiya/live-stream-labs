@@ -33,6 +33,7 @@ Install ffmpeg with `winget install Gyan.FFmpeg` (Windows), `brew install ffmpeg
 | Command | What it does |
 |---|---|
 | `./run.sh` | Install what is missing, then start the whole stack |
+| `./run.sh share` | The same, behind a public https address so guests anywhere can join |
 | `./run.sh stop` | Stop a stack that is still holding its ports |
 | `./run.sh restart` | Stop, then start |
 | `./run.sh check` | Typecheck, lint and unit tests |
@@ -51,6 +52,28 @@ The stack is five processes:
 
 Every setting has a development default, so local use needs no `.env`. To change one, copy
 `.env.example` to `.env`.
+
+## Invite guests from other networks
+
+`./run.sh share` starts the stack behind a tunnel and prints a public https address. Open the
+studio at that address, not at localhost, and send guests the invite link from there.
+
+It uses ngrok when ngrok is installed and signed in, otherwise a Cloudflare quick tunnel, which
+needs no account and is downloaded on first use. Force one with `TUNNEL=ngrok ./run.sh share` or
+`TUNNEL=cloudflare ./run.sh share`. A quick tunnel's address changes every time it starts.
+
+The tunnel carries the web app and the API only. Camera and microphone traffic goes straight
+between each browser and LiveKit, and a LiveKit running on your computer cannot be reached from
+outside your network. For guests elsewhere, create a LiveKit server on the internet (a free
+LiveKit Cloud project works) and set these in `.env`:
+
+```
+LIVEKIT_URL=wss://<your-project>.livekit.cloud
+LIVEKIT_API_KEY=<key>
+LIVEKIT_API_SECRET=<secret>
+```
+
+Guests on the same Wi-Fi as you work without that.
 
 ## Try a stream without a real platform
 

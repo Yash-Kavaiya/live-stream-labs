@@ -124,8 +124,9 @@ jobs:
       - name: Smoke test
         run: |
           set -e
-          curl -fsS "https://$API_HOST/healthz"
-          curl -fsS "https://$WORKER_HOST/healthz"
+          # Not /healthz: Cloud Run reserves that path and answers 404 itself.
+          curl -fsS "https://$API_HOST/api/config"
+          curl -fsS "https://$WORKER_HOST/health"
           curl -fsS "https://$WEB_HOST/" | grep -q '<div id="root">'
           curl -fsS "https://$WEB_HOST/api/config"
           echo

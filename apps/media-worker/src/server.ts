@@ -51,7 +51,8 @@ export function startWorker(cfg: WorkerConfig, api: ApiClient = httpApiClient(cf
   const log = (message: string) => console.log(`[worker] ${message}`);
 
   const server = createServer((req, res) => {
-    if (req.url === '/healthz') {
+    // Cloud Run keeps /healthz for itself and never passes it on, so /health answers too.
+    if (req.url === '/healthz' || req.url === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, sessions: sessions.size }));
       return;

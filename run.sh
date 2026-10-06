@@ -2,6 +2,7 @@
 # One script to set up and run StreamLabs Studio.
 #
 #   ./run.sh            install what is missing, then start the whole stack
+#   ./run.sh share      the same, behind a public https address so guests anywhere can join
 #   ./run.sh stop       stop a stack that is still holding its ports
 #   ./run.sh restart    stop, then start
 #   ./run.sh check      typecheck, lint and unit tests
@@ -80,8 +81,20 @@ start_stack() {
   exec npm run dev
 }
 
+share_stack() {
+  check_tools
+  install_deps
+  if [ -n "$(port_pids)" ]; then
+    fail "The stack (or something else) is already using its ports. Run './run.sh stop' first."
+  fi
+  say "Starting StreamLabs Studio behind a public address  (Ctrl+C to stop)"
+  # TUNNEL=ngrok or TUNNEL=cloudflare picks the tunnel; see scripts/share.mjs.
+  exec node scripts/share.mjs
+}
+
 case "${1:-start}" in
   start) start_stack ;;
+  share) share_stack ;;
   stop) stop_stack ;;
   restart)
     stop_stack
@@ -104,5 +117,5 @@ case "${1:-start}" in
     install_deps
     npm run build
     ;;
-  *) fail "Unknown command '$1'. Use: start, stop, restart, check, e2e or build." ;;
+  *) fail "Unknown command '$1'. Use: start, share, stop, restart, check, e2e or build." ;;
 esac

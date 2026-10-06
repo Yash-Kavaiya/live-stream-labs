@@ -10,6 +10,8 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // `./run.sh share` puts the app behind a tunnel; Vite refuses host names it was not told about.
+    allowedHosts: process.env.TUNNEL_HOST ? [process.env.TUNNEL_HOST] : [],
     proxy: { '/api': api, '/assets': api },
   },
   build: { target: 'es2022', sourcemap: true },
