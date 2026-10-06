@@ -13,6 +13,8 @@ import {
 } from '@studio/shared';
 import { Button, Icon, IconButton, TextField } from '@studio/ui';
 import { useState } from 'react';
+import { MusicPanel } from './music/music-panel';
+import type { MusicPlayer } from './music/player';
 
 type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 
@@ -39,7 +41,17 @@ const PRESETS: { name: string; style: BannerStyle; text: string; subtitle?: stri
 
 const newId = () => crypto.randomUUID().slice(0, 8);
 
-export function BannersPanel({ scene, update }: { scene: Scene; update: SceneUpdater }) {
+interface Props {
+  broadcastId: string;
+  scene: Scene;
+  update: SceneUpdater;
+  music: MusicPlayer | null;
+  ensureMusic(): MusicPlayer;
+  /** The host's handle, for the Follow preset. */
+  handle?: string;
+}
+
+export function BannersPanel({ broadcastId, scene, update, music, ensureMusic, handle }: Props) {
   const [style, setStyle] = useState<BannerStyle>('lower-third');
   const [text, setText] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -56,12 +68,15 @@ export function BannersPanel({ scene, update }: { scene: Scene; update: SceneUpd
   };
 
   const applyPreset = (preset: (typeof PRESETS)[number]) => {
-    const banner: Banner = { id: newId(), text: preset.text, subtitle: preset.subtitle ?? '', style: preset.style };
+    const text = preset.style === 'social' && handle ? `@${handle}` : preset.text;
+    const banner: Banner = { id: newId(), text, subtitle: preset.subtitle ?? '', style: preset.style };
     update((s) => toggleBanner(addBanner(s, banner), banner.id));
   };
 
   return (
     <div className="panel-scroll col" style={{ gap: 20 }}>
+      <MusicPanel broadcastId={broadcastId} scene={scene} update={update} player={music} ensurePlayer={ensureMusic} />
+
       <section className="col">
         <h3 className="title-small">Quick banners</h3>
         <div className="timer-row">

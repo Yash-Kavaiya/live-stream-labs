@@ -330,3 +330,51 @@ md-slider { --md-slider-handle-width: 16px; --md-slider-handle-height: 16px; mar
 
 .render-page { position: fixed; inset: 0; background: #000; }
 .render-page .program-canvas { width: 100vw; height: 100vh; object-fit: contain; }
+
+/* Music */
+.music-chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 12px 0 8px; }
+.music-chip md-icon { --md-icon-size: 18px; }
+
+/* Daily rundown */
+.rundown-item { flex-direction: column; align-items: stretch; }
+.rundown-item .banner-toggle { align-items: flex-start; }
+.rundown-number { flex: none; width: 22px; text-align: right; opacity: 0.6; line-height: 1.5; }
+.rundown-headline { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rundown-sources { padding: 0 12px 12px 46px; }
+.rundown-source { display: flex; align-items: center; gap: 4px; min-width: 0; }
+
+/* Teleprompter: on the host's page only, never on the program canvas. */
+.teleprompter { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--md-sys-shape-corner-large); background: #0b0d12; color: #f4f6fb; }
+.teleprompter-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.teleprompter-bar md-icon-button, .teleprompter-bar md-filled-icon-button { --md-icon-button-icon-color: #f4f6fb; --md-icon-button-hover-icon-color: #ffffff; --md-icon-button-focus-icon-color: #ffffff; }
+.teleprompter-bar .muted, .teleprompter-notes .label-large { color: rgb(244 246 251 / 0.65); }
+.teleprompter-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 28%); gap: 12px; }
+.teleprompter-body:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.teleprompter-script { height: 30vh; min-height: 160px; overflow-y: auto; padding: 8px 16px; font-weight: 500; line-height: 1.5; border-radius: var(--md-sys-shape-corner-medium); background: #000000; scrollbar-width: thin; }
+.teleprompter-script:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.teleprompter-script p { margin: 0 0 0.7em; }
+.teleprompter-notes { max-height: 30vh; min-height: 160px; overflow-y: auto; padding: 8px 12px; border-radius: var(--md-sys-shape-corner-medium); background: rgb(255 255 255 / 0.08); }
+.teleprompter-notes h4 { margin: 0 0 6px; }
+.teleprompter-notes p { margin: 0; white-space: pre-wrap; }
+.teleprompter-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 720px) {
+  .teleprompter-body, .teleprompter-settings { grid-template-columns: minmax(0, 1fr); }
+  .teleprompter-notes { min-height: 0; max-height: 18vh; }
+}
+
+/* Full script page */
+.script-page { max-width: 860px; margin: 0 auto; padding: 32px 24px 80px; display: flex; flex-direction: column; gap: 28px; overflow: auto; height: 100%; }
+.script-item { display: flex; flex-direction: column; gap: 8px; padding-top: 24px; border-top: 1px solid var(--md-sys-color-outline-variant); }
+.script-item h2, .script-item h3, .script-item p, .script-item ul { margin: 0; }
+.script-item h3 { margin-top: 8px; color: var(--md-sys-color-on-surface-variant); }
+.script-tag { color: var(--md-sys-color-primary); }
+.script-text { font-size: 1.25rem; line-height: 1.6; }
+.script-text p + p { margin-top: 0.8em; }
+.script-item a { color: var(--md-sys-color-primary); overflow-wrap: anywhere; }
+@media print {
+  .no-print, .snackbar-host { display: none !important; }
+  html, body, #root { height: auto !important; overflow: visible !important; background: #ffffff !important; }
+  .script-page { height: auto; overflow: visible; padding: 0; color: #000000; }
+  .script-item { break-inside: avoid; }
+  .script-page .muted, .script-tag, .script-item h3, .script-item a { color: #333333 !important; }
+}

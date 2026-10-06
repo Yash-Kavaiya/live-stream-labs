@@ -18,6 +18,8 @@ import { Button, Icon, Select, TextField } from '@studio/ui';
 import { useEffect, useState } from 'react';
 import { fetchMatches, pickDefaultMatch, type MatchRef } from '../lib/cricket-feed';
 import { CleanControls } from './clean-controls';
+import { RundownPanel } from './rundown/rundown-panel';
+import type { RundownState } from './rundown/use-rundown';
 
 type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 interface Props {
@@ -321,13 +323,14 @@ export const TEMPLATE_PAGES: Record<TemplateId, { label: string; icon: string }>
 };
 
 /** The page of controls for whichever template is active. The clean look's page is the layout designer. */
-export function TemplatePage(props: Props & { broadcastId: string; liveScore?: LiveScoreState }) {
+export function TemplatePage(props: Props & { broadcastId: string; liveScore?: LiveScoreState; rundown?: RundownState }) {
   switch (props.scene.template) {
     case 'none':
       return <CleanControls {...props} />;
     case 'newsroom':
       return (
-        <div className="panel-scroll col">
+        <div className="panel-scroll col" style={{ gap: 20 }}>
+          {props.rundown && <RundownPanel scene={props.scene} update={props.update} state={props.rundown} />}
           <NewsControls {...props} />
         </div>
       );

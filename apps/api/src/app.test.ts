@@ -233,3 +233,29 @@ describe('broadcast lifecycle', () => {
     expect((await host.call('POST', `/api/broadcasts/${empty.id}/live`)).status).toBe(400);
   });
 });
+
+describe('assets', () => {
+  it('accepts a music upload and serves it back, and refuses other types', async () => {
+    const broadcast = (await host.call('POST', '/api/broadcasts', { title: 'Music' })).body;
+    const upload = (type: string, bytes = 16) =>
+      t.app.inject({
+        method: 'POST',
+        url: `/api/broadcasts/${broadcast.id}/assets`,
+        headers: { cookie: host.cookieHeader, 'content-type': type },
+        payload: Buffer.alloc(bytes, 1),
+      });
+
+    const ok = await upload('audio/mpeg');
+    expect(ok.statusCode).toBe(200);
+    const url = ok.json().url as string;
+    expect(url).toMatch(/^\/assets\/[A-Za-z0-9_-]+\.mp3$/);
+    const served = await t.app.inject({ method: 'GET', url });
+    expect(served.statusCode).toBe(200);
+    expect(served.headers['content-type']).toContain('audio/mpeg');
+
+    expect((await upload('text/html')).statusCode).toBeGreaterThanOrEqual(400);
+    // A track may be larger than an image is allowed to be.
+    expect((await upload('audio/mpeg', 6 * 1024 * 1024)).statusCode).toBe(200);
+    expect((await upload('image/png', 6 * 1024 * 1024)).statusCode).toBe(400);
+  });
+});

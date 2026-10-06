@@ -89,6 +89,22 @@ not to be needed: in relay mode the worker that receives the WebSocket is the on
 work, and in livekit mode LiveKit Egress has its own queue. Status flows worker → API over HTTP and
 API → studio over LiveKit data messages. Redis is used only by LiveKit.
 
+**The daily rundown is made in the API process.** `apps/api/src/news` has four parts: `sources.ts`
+reads public feeds into `NewsItem`s and opens the top stories' pages for their text; `writer.ts`
+asks a model for the show in two calls (stories, then segments) and turns the answer into a
+`Rundown`; `schedule.ts` runs it at 17:00 Asia/Kolkata; `service.ts` stores one row per day and
+makes one at a time. Three rules keep model output safe to put on air: the model cites items by
+number and never types a URL, every string is cut to the limit of the scene field it will fill,
+and a segment the model leaves out is filled from the collected items. With several API replicas
+each would run the schedule; the upsert by date makes that wasteful, not wrong. Move the timer to
+one replica or a cron job before scaling out.
+
+**Music never touches the scene.** The host's `MusicPlayer` has its own audio context. Its output
+goes to the host's speakers and to a media stream track, which the program `AudioMixer` mixes like
+a microphone, on every screen including the holding screens. Built-in tracks are computed sample
+by sample in `music/synth.ts`, so they can be tested without a browser and ship no audio files.
+Only the list of uploaded tracks is saved with the broadcast.
+
 ## Scaling
 
 | Tier | How it scales | Bottleneck |
@@ -131,9 +147,14 @@ mode. Ten guests in one room is well inside a single LiveKit node.
 
 ## Testing
 
-- `npm test`: 59 unit and integration tests. The API runs against in-memory PGlite; the worker
+- `npm test`: unit and integration tests, among them the feed parsers against saved samples, the
+  rundown writer with faked models, the schedule's time arithmetic and the rundown routes. The API runs against in-memory PGlite; the worker
   test runs real ffmpeg.
 - `npm run e2e`: Playwright drives Chrome with a synthetic camera. A host and a guest go live to
   two local RTMP servers; `ffprobe` checks both receive H.264 + AAC and that the recording plays.
-- Not covered by automated tests: `livekit` egress mode and the infra files (no Docker on the
+- `e2e/rundown.spec.ts` and `e2e/music.spec.ts` run the rundown from the News tab and play music.
+  The rundown test needs `NEWS_FIXTURE=1` (Playwright sets it when it starts the stack): the API
+  then uses fixed news and calls no feed and no model.
+- Not covered by automated tests: the Gemini writer (no key with credit was available), what the
+  music sounds like, `livekit` egress mode and the infra files (no Docker on the
   development machine), and the OAuth adapters against the real platforms (tested with mocked HTTP).

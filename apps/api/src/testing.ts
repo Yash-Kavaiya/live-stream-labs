@@ -10,6 +10,10 @@ import { createAdapterResolver } from './destinations/adapters';
 import type { Fetch } from './destinations/types';
 import { RelayEgress } from './egress/providers';
 import type { Deps } from './http/context';
+import { collectFixture } from './news/fixture';
+import { dbStore, RundownService } from './news/service';
+import type { Collected } from './news/sources';
+import { createWriter, type Writer } from './news/writer';
 import { FakeLiveKit } from './services/livekit';
 
 export interface TestApp {
@@ -21,7 +25,7 @@ export interface TestApp {
 
 /** A full API on an in-memory database, with LiveKit and outbound HTTP faked. */
 export async function createTestApp(
-  opts: { env?: Record<string, string>; fetch?: Fetch } = {},
+  opts: { env?: Record<string, string>; fetch?: Fetch; collect?: (now: Date) => Promise<Collected>; writer?: Writer; now?: () => Date } = {},
 ): Promise<TestApp> {
   const config: Config = loadConfig({
     NODE_ENV: 'test',
@@ -31,6 +35,11 @@ export async function createTestApp(
   const { db, close } = await openDb({});
   const signer = new TokenSigner(config.sessionSecret);
   const livekit = new FakeLiveKit();
+  const fetchFn: Fetch =
+    opts.fetch ??
+    (async () => {
+      throw new Error('unexpected outbound request in test');
+    });
   const deps: Deps = {
     config,
     db,
@@ -39,11 +48,9 @@ export async function createTestApp(
     box: new SecretBox(config.encryptionKey),
     egress: new RelayEgress(signer, config.publicIngestUrl),
     adapterFor: createAdapterResolver(config),
-    fetch:
-      opts.fetch ??
-      (async () => {
-        throw new Error('unexpected outbound request in test');
-      }),
+    fetch: fetchFn,
+    // No network and no model: fixed news, and the rundown that is built without scripts.
+    rundowns: new RundownService(dbStore(db), opts.collect ?? collectFixture, opts.writer ?? createWriter(config.news, fetchFn, []), opts.now),
   };
   const app = await buildApp(deps);
   return {
@@ -62,6 +69,11 @@ export class TestClient {
   private cookie = '';
 
   constructor(private readonly app: FastifyInstance) {}
+
+  /** The session cookie, for requests that `call` cannot make (a raw upload). */
+  get cookieHeader(): string {
+    return this.cookie;
+  }
 
   async call(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, body?: unknown) {
     const res = await this.app.inject({

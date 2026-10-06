@@ -116,6 +116,8 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
   layout re-arranges itself, the speaker is highlighted, and optionally moved to the main spot.
 - **News room.** Anchor, interview, panel and full-screen headline scenes, with a channel bar,
   clock, headline and second line, story points and a ticker strip.
+- **Daily AI news rundown.** A full show written every day at 5 PM India time, run from the News
+  tab with a teleprompter; see below.
 - **Cricket.** Follows a real match or is scored by hand; see below.
 - **Watch party.** Shared video on top, emoji reactions, and a winner celebration with trophy and
   confetti.
@@ -128,6 +130,12 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 - **Banners.** Eight kinds: lower third, name + title, social handle, call to action, ticker, top
   headline, corner badge and title card. Banners in different positions can show together, and
   there are one-click presets.
+- **Music.** At the top of the Banners tab, in every template: four stings (intro, breaking,
+  transition, outro) and three looping beds (headlines, soft, countdown) that the studio generates
+  itself, so there is nothing to license, plus your own uploads (MP3, WAV, OGG or M4A, up to
+  20 MB). Volume, fade out, and automatic lowering while someone on stage speaks. Music goes out
+  on the stream and the recording and keeps playing on the holding screens. Guests in the studio
+  do not hear it.
 - **Chat.** Private studio chat; Twitch and YouTube comments that can be put on screen.
 - **Recording.** Every stream is recorded; watch, download or share a link.
 - **Themes.** Light, dark, or follow the system.
@@ -154,6 +162,52 @@ feed does not cover.
 The live score comes from ESPN's public cricket feed. It is free and needs no key, but it is not a
 documented API and could change or be blocked without notice. When it cannot be reached, the last
 score stays on screen and the Cricket tab says so. Only the host's browser talks to the feed.
+
+## Daily AI news rundown
+
+Choose the **News** template on the Scenes tab, then open the **News** tab.
+
+Every day at 5 PM India time the API collects the day's AI news and writes a show of about 15
+minutes. If the stack was not running at 5 PM, it makes the rundown when it next starts after that
+hour. **Generate now** makes one at any time; it takes a few minutes.
+
+**Where the news comes from.** Hacker News, new fast-rising repositories on GitHub, trending
+models and Spaces on Hugging Face, new arXiv papers, and the feeds of AI labs and tech news sites
+(the list is `FEEDS` in `apps/api/src/news/sources.ts`). None needs a key. For the most-noticed
+stories the article itself is read, so the script has more to go on than a headline. X has no free
+API: a post on X appears only when one of those sources links to it, and you can add any link to a
+story yourself.
+
+**Who writes it.** A model ranks the items and writes the script. Set one of these in `.env`:
+
+```
+NVIDIA_API_KEY=<key from build.nvidia.com>
+GEMINI_API_KEY=<key from aistudio.google.com>
+```
+
+NVIDIA is tried first (`NEWS_MODEL`, then `NEWS_FALLBACK_MODEL` when the first is busy), then
+Gemini. The model may only cite the links that were collected; it cannot add its own. With no key,
+or when every model fails, the rundown still has headlines, summaries and links, but no spoken
+script. A script is a model's reading of the sources: skim the **Background** notes and the source
+before you say a number on air.
+
+**The show.** Opening, top story, four more stories, repo of the day, project of the day, model of
+the day, paper of the day, quick hits, number of the day, and sign-off. `SHOW_NAME`, `SHOW_HOST`,
+`SHOW_X`, `SHOW_GITHUB` and `SHOW_LINKEDIN` in `.env` set whose show it is; the opening and the
+sign-off read them out.
+
+**Running it.**
+
+- Click an item, or **Start the show** and **Next**, to put it on air. Its headline, second line,
+  story points and ticker go on screen.
+- The **teleprompter** appears under the stage with the words to say and background notes beside
+  them. Only you see it: it is not part of the stream. Space starts and pauses the scroll, the
+  left and right arrows change item, up and down nudge the text.
+- Each item lists its sources. **Open to share** opens the page in its own window; share that
+  window with the screen share button. **Show card** draws the site, title and a quote on the
+  stream beside you (Anchor scene, with only you on stage).
+- **Add a link** attaches a post or page of your own to the item on air.
+- **Full script** opens the whole show on one page, for reading ahead or printing.
 
 ## Commands
 

@@ -8,6 +8,8 @@ import type {
   InviteDto,
   LoginInput,
   RecordingDto,
+  Rundown,
+  RundownStatusDto,
   Scene,
   ServerConfigDto,
   SignupInput,
@@ -81,6 +83,11 @@ export const api = {
 
   recordings: () => get<RecordingDto[]>('/api/recordings'),
   deleteRecording: (id: string) => request<{ ok: true }>('DELETE', `/api/recordings/${id}`),
+  rundownLatest: () => get<RundownStatusDto>('/api/rundowns/latest'),
+  rundownDates: () => get<string[]>('/api/rundowns'),
+  rundown: (date: string) => get<Rundown>(`/api/rundowns/${date}`),
+  generateRundown: () => post<RundownStatusDto>('/api/rundowns/generate'),
+
   watch: (token: string) => get<{ title: string; createdAt: string; sizeBytes: number }>(`/api/watch/${token}`),
 };
 

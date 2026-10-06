@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { platformIdSchema } from './platforms';
+import type { Rundown } from './rundown';
 import { sceneSchema, templateIdSchema } from './scene';
 
 // ---------- Auth ----------
@@ -147,4 +148,18 @@ export interface ServerConfigDto {
 export interface ApiError {
   error: string;
   message: string;
+}
+
+// ---------- Daily rundown ----------
+
+/** The newest rundown and how making the next one is going. */
+export interface RundownStatusDto {
+  rundown: Rundown | null;
+  generating: boolean;
+  /** Why the last attempt made nothing, or null. */
+  error: string | null;
+  /** Whose show it is: named in the opening, and the handles shown at the sign-off. */
+  show: { name: string; host: string; x: string; github: string; linkedin: string };
+  /** True when the server makes rundowns from fixed test news (NEWS_FIXTURE=1), not the real feeds. */
+  fixture: boolean;
 }

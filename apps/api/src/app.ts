@@ -7,6 +7,7 @@ import { broadcastRoutes } from './routes/broadcasts';
 import { destinationRoutes } from './routes/destinations';
 import { fileRoutes } from './routes/files';
 import { liveRoutes } from './routes/live';
+import { rundownRoutes } from './routes/rundowns';
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const app = Fastify({
@@ -41,6 +42,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   broadcastRoutes(app, deps);
   liveRoutes(app, deps);
   fileRoutes(app, deps);
+  rundownRoutes(app, deps);
 
   return app;
 }
