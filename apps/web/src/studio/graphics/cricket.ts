@@ -57,10 +57,13 @@ export function drawCricketStrip(p: Painter, scene: Scene): void {
   const rowA = top + unit * 6;
   const rowB = top + unit * 13;
 
-  ctx.fillStyle = 'rgb(3 14 8 / 0.96)';
+  ctx.fillStyle = 'rgb(4 16 46 / 0.97)';
   ctx.fillRect(0, top, size.width, height);
-  ctx.fillStyle = accent;
-  ctx.fillRect(0, top, size.width, unit * 0.6);
+  // Saffron, white and blue bands along the top edge of the strip.
+  [accent, '#ffffff', '#1a73e8'].forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, top + i * unit * 0.3, size.width, unit * 0.3);
+  });
 
   // Left block: who is batting and the score, on the accent colour.
   const blockW = unit * 46;

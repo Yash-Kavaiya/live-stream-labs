@@ -16,14 +16,15 @@ import { formatDuration } from '../lib/format';
 import { DestinationsDialog, InviteDialog, PlatformBadge, SettingsDialog } from './dialogs';
 import { shareVideoClip, useAutoDirector, useComments, useElapsed, useSceneController } from './hooks';
 import { BannersPanel, BrandPanel, ChatPanel, CommentsPanel, ScenesPanel } from './panels';
-import { LayoutPicker, ProgramCanvas, SourceTile } from './stage';
+import { LayoutPicker } from './LayoutThumb';
+import { ProgramCanvas, SourceTile } from './stage';
+import { TEMPLATE_PAGES, TemplatePage } from './template-panels';
 import { useLiveControl } from './useLiveControl';
 import { useDrawableSources, useStudioRoom, type JoinOptions } from './useStudioRoom';
 
-type PanelId = 'scenes' | 'comments' | 'banners' | 'brand' | 'chat';
+type PanelId = 'scenes' | 'template' | 'comments' | 'banners' | 'brand' | 'chat';
 
-const HOST_TABS: { id: PanelId; label: string; icon: string }[] = [
-  { id: 'scenes', label: 'Scenes', icon: 'dashboard_customize' },
+const FIXED_TABS: { id: PanelId; label: string; icon: string }[] = [
   { id: 'comments', label: 'Comments', icon: 'forum' },
   { id: 'banners', label: 'Banners', icon: 'call_to_action' },
   { id: 'brand', label: 'Brand', icon: 'palette' },
@@ -185,6 +186,12 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
   const isLive = live.phase === 'live';
   const stageHasMedia = scene.stage.includes('media');
+  // The second tab is the page of whichever template is on: Layout, News, Cricket or Party.
+  const hostTabs = [
+    { id: 'scenes' as const, label: 'Scenes', icon: 'dashboard_customize' },
+    { id: 'template' as const, ...TEMPLATE_PAGES[scene.template] },
+    ...FIXED_TABS,
+  ];
   const templateOwnsLayout =
     scene.template === 'newsroom' || (scene.template === 'cricket' && scene.cricket.view === 'dashboard');
 
@@ -258,7 +265,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
                   <Icon name="dashboard_customize" /> Layout is set by the {scene.template === 'newsroom' ? 'news scene' : 'match dashboard'}
                 </span>
               ) : (
-                <LayoutPicker value={scene.layout} onChange={(layout) => updateScene((s) => ({ ...s, layout }))} />
+                <LayoutPicker value={scene.layout} style={scene.style} onChange={(layout) => updateScene((s) => ({ ...s, layout }))} />
               )}
               {isLive && destinations.some((d) => d.status === 'failed') && (
                 <span className="chip error"><Icon name="error" /> A destination dropped</span>
@@ -333,9 +340,10 @@ export function StudioRoom({ session, join, onExit }: Props) {
         </section>
 
         <aside className="studio-side">
-          {isHost ? <Tabs<PanelId> tabs={HOST_TABS} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
+          {isHost ? <Tabs<PanelId> tabs={hostTabs} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
           <div className="studio-panel">
-            {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} />}
+            {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} onOpenPage={() => setPanel('template')} />}
+            {panel === 'template' && <TemplatePage scene={scene} update={updateScene} />}
             {panel === 'comments' && <CommentsPanel comments={comments} scene={scene} update={updateScene} />}
             {panel === 'banners' && <BannersPanel scene={scene} update={updateScene} />}
             {panel === 'brand' && <BrandPanel broadcastId={broadcastId} scene={scene} update={updateScene} />}

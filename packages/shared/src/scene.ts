@@ -1,12 +1,27 @@
 import { z } from 'zod';
 
-export const LAYOUT_IDS = ['solo', 'grid', 'spotlight', 'pip', 'screen', 'cinema'] as const;
+export const LAYOUT_IDS = [
+  'solo',
+  'grid',
+  'split',
+  'stack',
+  'duo',
+  'mosaic',
+  'spotlight',
+  'pip',
+  'screen',
+  'cinema',
+] as const;
 export const layoutIdSchema = z.enum(LAYOUT_IDS);
 export type LayoutId = z.infer<typeof layoutIdSchema>;
 
 export const LAYOUT_LABELS: Record<LayoutId, string> = {
   solo: 'Solo',
   grid: 'Grid',
+  split: 'Side by side',
+  stack: 'Stacked',
+  duo: 'Lead + guests',
+  mosaic: 'Mosaic',
   spotlight: 'Spotlight',
   pip: 'Picture in picture',
   screen: 'Screen + sidebar',
@@ -173,6 +188,49 @@ export const celebrationSchema = z.object({
 });
 export type Celebration = z.infer<typeof celebrationSchema>;
 
+// ---------- Look of the frame ----------
+
+/**
+ * How the tiles are arranged and dressed. The geometry fields mirror `LayoutOptions`; lengths are
+ * in hundredths of the frame height so a look is the same at any resolution.
+ */
+export const layoutStyleSchema = z.object({
+  gap: z.number().min(0).max(6),
+  radius: z.number().min(0).max(8),
+  padding: z.number().min(0).max(10),
+  mainShare: z.number().min(0.5).max(0.85),
+  sideLeft: z.boolean(),
+  pipCorner: z.enum(['tl', 'tr', 'bl', 'br']),
+  pipSize: z.number().min(0.12).max(0.35),
+  /** cover crops cameras to fill their tile; contain shows the whole picture with bars. */
+  cameraFit: z.enum(['cover', 'contain']),
+  border: z.enum(['none', 'thin', 'thick']),
+  borderColor: z.enum(['white', 'brand']),
+  shadow: z.boolean(),
+  /** Behind the tiles in the clean look. Templates bring their own backdrop. */
+  backdrop: z.enum(['dark', 'light', 'brand', 'gradient']),
+  nameStyle: z.enum(['pill', 'bar', 'text']),
+  namePosition: z.enum(['bottom-left', 'bottom-center', 'top-left']),
+});
+export type LayoutStyle = z.infer<typeof layoutStyleSchema>;
+
+export const DEFAULT_STYLE: LayoutStyle = {
+  gap: 2.2,
+  radius: 2.2,
+  padding: 2.2,
+  mainShare: 0.78,
+  sideLeft: false,
+  pipCorner: 'br',
+  pipSize: 0.2,
+  cameraFit: 'cover',
+  border: 'none',
+  borderColor: 'white',
+  shadow: false,
+  backdrop: 'dark',
+  nameStyle: 'pill',
+  namePosition: 'bottom-left',
+};
+
 /** What the studio does by itself so the host does not have to direct every change. */
 export const autoSchema = z.object({
   /** Put guests on stage as they join, until `maxOnStage` people are there. */
@@ -216,6 +274,7 @@ export const sceneSchema = z.object({
   news: newsSchema.default(DEFAULT_NEWS),
   cricket: cricketSchema.default(DEFAULT_CRICKET),
   celebration: celebrationSchema.nullable().default(null),
+  style: layoutStyleSchema.default(DEFAULT_STYLE),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -236,6 +295,7 @@ export const DEFAULT_SCENE: Scene = {
   news: DEFAULT_NEWS,
   cricket: DEFAULT_CRICKET,
   celebration: null,
+  style: DEFAULT_STYLE,
 };
 
 /** Parses a stored or received scene, filling in fields that older scenes do not have. */

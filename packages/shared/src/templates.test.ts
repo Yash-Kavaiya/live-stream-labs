@@ -21,7 +21,7 @@ describe('templates', () => {
   });
 
   it('fills in new fields for a scene saved before they existed', () => {
-    const { template: _t, screen: _s, auto: _a, news: _n, cricket: _c, celebration: _e, ...old } = DEFAULT_SCENE;
+    const { template: _t, screen: _s, auto: _a, news: _n, cricket: _c, celebration: _e, style: _y, ...old } = DEFAULT_SCENE;
     const scene = normalizeScene({ ...old, layout: 'pip' });
     expect(scene).toMatchObject({ layout: 'pip', template: 'none', auto: DEFAULT_AUTO, cricket: DEFAULT_CRICKET });
   });

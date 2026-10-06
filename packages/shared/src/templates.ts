@@ -30,8 +30,9 @@ export const TEMPLATES: Record<TemplateId, TemplateInfo> = {
     id: 'cricket',
     name: 'Cricket',
     description: 'Ball-by-ball scoring with a score strip or a full match dashboard.',
-    accent: '#188038',
-    backdrop: ['#06391C', '#02140A'],
+    // Team India: blue with saffron.
+    accent: '#FF9933',
+    backdrop: ['#0B3D91', '#041A44'],
   },
   watchparty: {
     id: 'watchparty',

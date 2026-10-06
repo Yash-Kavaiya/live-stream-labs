@@ -105,7 +105,7 @@ export function computeCricketLayout(scene: Scene, ids: string[], canvas: Size =
   const u = unit(canvas);
   if (scene.cricket.view === 'match') {
     // The usual layout, in the space above the score strip.
-    return computeLayout(scene.layout, ids, { width: canvas.width, height: canvas.height - CRICKET_STRIP * u });
+    return computeLayout(scene.layout, ids, { width: canvas.width, height: canvas.height - CRICKET_STRIP * u }, scene.style);
   }
   if (ids.length === 0) return [];
   const width = canvas.width * CRICKET_CAMERA_COLUMN;
@@ -117,5 +117,5 @@ export function computeCricketLayout(scene: Scene, ids: string[], canvas: Size =
 export function computeSceneLayout(scene: Scene, ids: string[], canvas: Size = PROGRAM_SIZE): Tile[] {
   if (scene.template === 'newsroom') return computeNewsLayout(scene.news.view, ids, canvas);
   if (scene.template === 'cricket') return computeCricketLayout(scene, ids, canvas);
-  return computeLayout(scene.layout, ids, canvas);
+  return computeLayout(scene.layout, ids, canvas, scene.style);
 }

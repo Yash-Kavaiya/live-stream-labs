@@ -17,6 +17,7 @@ import '@material/web/progress/circular-progress.js';
 import '@material/web/progress/linear-progress.js';
 import '@material/web/select/outlined-select.js';
 import '@material/web/select/select-option.js';
+import '@material/web/slider/slider.js';
 import '@material/web/switch/switch.js';
 import '@material/web/tabs/primary-tab.js';
 import '@material/web/tabs/tabs.js';
@@ -46,6 +47,7 @@ declare module 'react' {
       'md-linear-progress': MdElement;
       'md-outlined-select': MdElement;
       'md-select-option': MdElement;
+      'md-slider': MdElement;
       'md-switch': MdElement;
       'md-primary-tab': MdElement;
       'md-tabs': MdElement;

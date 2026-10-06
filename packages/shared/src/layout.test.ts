@@ -34,7 +34,7 @@ describe('computeLayout', () => {
     }
   });
 
-  it.each(['grid', 'spotlight', 'screen', 'cinema'] as const)('%s tiles never overlap', (layout) => {
+  it.each(['grid', 'split', 'stack', 'duo', 'mosaic', 'spotlight', 'screen', 'cinema'] as const)('%s tiles never overlap', (layout) => {
     for (let n = 2; n <= 10; n++) {
       const tiles = computeLayout(layout, cams(n));
       for (let i = 0; i < tiles.length; i++)
@@ -74,6 +74,67 @@ describe('computeLayout', () => {
     const small = computeLayout('grid', cams(4), { width: 640, height: 360 });
     const large = computeLayout('grid', cams(4), { width: 1920, height: 1080 });
     expect(large[0]!.width / small[0]!.width).toBeCloseTo(3, 1);
+  });
+});
+
+describe('two-person and custom layouts', () => {
+  it('split puts two people side by side at full height', () => {
+    const [a, b] = computeLayout('split', cams(2));
+    expect(a!.y).toBe(b!.y);
+    expect(a!.width).toBe(b!.width);
+    expect(a!.height).toBeGreaterThan(PROGRAM_SIZE.height * 0.9);
+    expect(b!.x).toBeGreaterThan(a!.x + a!.width - 1);
+  });
+
+  it('stack puts them one above the other at full width', () => {
+    const [a, b] = computeLayout('stack', cams(2));
+    expect(a!.x).toBe(b!.x);
+    expect(a!.width).toBeGreaterThan(PROGRAM_SIZE.width * 0.9);
+    expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1);
+  });
+
+  it('duo gives the first person the big full-height tile', () => {
+    const [lead, guest] = computeLayout('duo', cams(2));
+    expect(lead!.width).toBeGreaterThan(guest!.width * 3);
+    expect(lead!.height).toBe(guest!.height);
+  });
+
+  it('mosaic makes the first tile twice the size of the others', () => {
+    const tiles = computeLayout('mosaic', cams(6));
+    expect(tiles[0]!.width).toBeGreaterThan(tiles[1]!.width * 2 - 1);
+    for (const t of tiles.slice(1)) expect(t.width).toBe(tiles[1]!.width);
+  });
+
+  it('honours spacing, margin and corner options', () => {
+    const tight = computeLayout('split', cams(2), PROGRAM_SIZE, { gap: 0, padding: 0, radius: 0 });
+    expect(tight[0]).toMatchObject({ x: 0, y: 0, width: 640, height: 720, radius: 0 });
+    expect(tight[1]!.x).toBe(640);
+
+    const roomy = computeLayout('split', cams(2), PROGRAM_SIZE, { gap: 6, padding: 10, radius: 8 });
+    expect(roomy[0]!.x).toBe(72);
+    expect(roomy[1]!.x - (roomy[0]!.x + roomy[0]!.width)).toBeCloseTo(43, 0);
+    expect(roomy[0]!.radius).toBe(58);
+  });
+
+  it('moves the sidebar and resizes the main tile', () => {
+    const right = computeLayout('spotlight', cams(3));
+    const left = computeLayout('spotlight', cams(3), PROGRAM_SIZE, { sideLeft: true });
+    expect(right[1]!.x).toBeGreaterThan(right[0]!.x);
+    expect(left[1]!.x).toBeLessThan(left[0]!.x);
+
+    const half = computeLayout('duo', cams(2), PROGRAM_SIZE, { mainShare: 0.5 });
+    expect(half[0]!.width).toBeCloseTo(half[1]!.width, 0);
+  });
+
+  it('places picture-in-picture tiles in the chosen corner at the chosen size', () => {
+    const topLeft = computeLayout('pip', ['screen:a', 'cam:a'], PROGRAM_SIZE, { pipCorner: 'tl', pipSize: 0.3 })[1]!;
+    expect(topLeft.x).toBeLessThan(40);
+    expect(topLeft.y).toBeLessThan(40);
+    expect(topLeft.width).toBe(384);
+
+    const bottomRight = computeLayout('pip', ['screen:a', 'cam:a'])[1]!;
+    expect(bottomRight.x + bottomRight.width).toBeGreaterThan(1240);
+    expect(bottomRight.y + bottomRight.height).toBeGreaterThan(680);
   });
 });
 

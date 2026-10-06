@@ -1,4 +1,5 @@
 import {
+  applyTemplate,
   createBroadcastSchema,
   DEFAULT_SCENE,
   joinInviteSchema,
@@ -63,7 +64,7 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
         description: input.description,
         status: input.scheduledAt ? 'scheduled' : 'draft',
         scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
-        scene: DEFAULT_SCENE,
+        scene: input.template === 'none' ? DEFAULT_SCENE : applyTemplate(DEFAULT_SCENE, input.template),
       })
       .returning();
     await setBroadcastDestinations(deps, userId, row!.id, input.destinationIds);

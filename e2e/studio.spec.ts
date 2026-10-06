@@ -111,12 +111,15 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await expect.poll(() => showsCamera(page)).toBe(true);
 
   // News scenes replace the layout picker while the news room is on.
+  await page.getByTestId('open-template-page').click();
   await page.getByTestId('news-interview').click();
   await expect(page.getByTestId('news-interview')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('layout-spotlight')).toHaveCount(0);
 
   // Cricket: score two balls and read the result back.
+  await page.getByTestId('tab-scenes').click();
   await page.getByTestId('template-cricket').click();
+  await page.getByTestId('tab-template').click();
   await page.getByTestId('ball-4').click();
   await page.getByTestId('ball-W').click();
   await expect(page.getByTestId('cricket-score')).toContainText('4/1');
@@ -124,7 +127,14 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await expect(page.getByTestId('cricket-dashboard')).toHaveAttribute('aria-pressed', 'true');
 
   // Back on the clean look the host can override the layout by hand.
+  await page.getByTestId('tab-scenes').click();
   await page.getByTestId('template-none').click();
+  await page.getByTestId('layout-spotlight').click();
+
+  // The Layout page: a two-person layout from the gallery.
+  await page.getByTestId('tab-template').click();
+  await page.getByTestId('gallery-split').click();
+  await expect(page.getByTestId('layout-split')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('layout-spotlight').click();
   await expect(page.getByTestId('layout-spotlight')).toHaveAttribute('aria-pressed', 'true');
 

@@ -57,9 +57,20 @@ for (const theme of ['light', 'dark'] as const) {
     await field(page, 'banner-text').fill('Markets rally as rates hold steady');
     await page.getByTestId('banner-add').click();
     await page.getByTestId('banner-toggle').click();
-    await page.getByTestId('tab-scenes').click();
-    // News room: every scene, with a headline and story points.
-    await page.getByTestId('template-newsroom').click();
+    const useTemplate = async (id: string) => {
+      await page.getByTestId('tab-scenes').click();
+      await page.getByTestId(`template-${id}`).click();
+      await page.getByTestId('tab-template').click();
+    };
+
+    // Clean look: the Layout page with a customised two-person layout.
+    await page.getByTestId('tab-template').click();
+    await page.getByTestId('gallery-split').click();
+    await page.waitForTimeout(800);
+    await shot('studio-layout-page');
+
+    // News room: every scene, with a headline.
+    await useTemplate('newsroom');
     await field(page, 'news-headline-text').fill('Markets rally as rates hold steady');
     for (const view of ['anchor', 'interview', 'panel', 'headline']) {
       await page.getByTestId(`news-${view}`).click();
@@ -68,16 +79,17 @@ for (const theme of ['light', 'dark'] as const) {
     }
 
     // Cricket: score an over, then both views.
-    await page.getByTestId('template-cricket').click();
+    await useTemplate('cricket');
     for (const ball of ['1', '4', '0', 'W', '6', 'wd', '2']) await page.getByTestId(`ball-${ball}`).click();
     await page.waitForTimeout(1200);
     await program('cricket-match');
     await page.getByTestId('cricket-dashboard').click();
     await page.waitForTimeout(1200);
     await program('cricket-dashboard');
+    await shot('studio-cricket-page');
 
     // Watch party: mid-celebration.
-    await page.getByTestId('template-watchparty').click();
+    await useTemplate('watchparty');
     await field(page, 'winner-name').fill('Team Rocket');
     await page.getByTestId('celebrate-winner').click();
     await page.waitForTimeout(1800);
@@ -87,6 +99,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.waitForTimeout(1500);
     await program('watchparty-reaction');
 
+    await page.getByTestId('tab-scenes').click();
     await page.getByTestId('screen-starting').click();
     await page.waitForTimeout(1200);
     await program('starting');

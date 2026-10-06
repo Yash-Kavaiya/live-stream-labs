@@ -20,7 +20,7 @@ import { Button, EmptyState, Icon, IconButton, Switch, TextField } from '@studio
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useToast } from '../lib/app-context';
-import { TemplateControls } from './template-panels';
+import { TEMPLATE_PAGES } from './template-panels';
 import type { ChatEntry } from './useStudioRoom';
 
 export type SceneUpdater = (change: (scene: Scene) => Scene) => void;
@@ -275,7 +275,7 @@ const SCREEN_BUTTONS: Record<ScreenId, { label: string; icon: string }> = {
   ending: { label: 'Ending', icon: 'waving_hand' },
 };
 
-export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpdater }) {
+export function ScenesPanel({ scene, update, onOpenPage }: { scene: Scene; update: SceneUpdater; onOpenPage(): void }) {
   const template = TEMPLATES[scene.template];
   const setAuto = (patch: Partial<AutoDirector>) => update((s) => ({ ...s, auto: { ...s.auto, ...patch } }));
   const stepMax = (by: number) =>
@@ -368,9 +368,12 @@ export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpda
           })}
         </div>
         <p className="body-small muted">{template.description}</p>
+        <div>
+          <Button variant="tonal" icon={TEMPLATE_PAGES[scene.template].icon} onClick={onOpenPage} data-testid="open-template-page">
+            Open the {TEMPLATE_PAGES[scene.template].label} page
+          </Button>
+        </div>
       </section>
-
-      <TemplateControls scene={scene} update={update} />
 
       <section className="col">
         <h3 className="title-small">Auto director</h3>

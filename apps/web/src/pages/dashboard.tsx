@@ -1,10 +1,13 @@
 import {
   PLATFORM_IDS,
   PLATFORMS,
+  TEMPLATE_IDS,
+  TEMPLATES,
   type BroadcastDto,
   type BroadcastStatus,
   type DestinationDto,
   type PlatformId,
+  type TemplateId,
 } from '@studio/shared';
 import { Button, Checkbox, Dialog, EmptyState, Icon, IconButton, Select, Spinner, TextField } from '@studio/ui';
 import { useEffect, useState } from 'react';
@@ -87,9 +90,11 @@ function NewBroadcastDialog({ open, onClose }: { open: boolean; onClose(): void 
   const [description, setDescription] = useState('');
   const [when, setWhen] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [template, setTemplate] = useState<TemplateId>('none');
 
   useEffect(() => {
     if (open) {
+      setTemplate('none');
       setTitle('');
       setDescription('');
       setWhen('');
@@ -104,6 +109,7 @@ function NewBroadcastDialog({ open, onClose }: { open: boolean; onClose(): void 
         description,
         scheduledAt: fromLocalInput(when),
         destinationIds: [...selected],
+        template,
       });
       navigate(`/studio/${broadcast.id}`);
     } catch (err) {
@@ -127,6 +133,28 @@ function NewBroadcastDialog({ open, onClose }: { open: boolean; onClose(): void 
       }
     >
       <TextField label="Title" value={title} onValue={setTitle} maxLength={120} required autoFocus data-testid="broadcast-title" />
+      <div className="col" style={{ gap: 8 }}>
+        <h3 className="title-small">Start from</h3>
+        <div className="template-grid four">
+          {TEMPLATE_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="template-card"
+              aria-pressed={template === id}
+              data-testid={`start-${id}`}
+              title={TEMPLATES[id].description}
+              onClick={() => setTemplate(id)}
+            >
+              <span className="template-swatch" style={{ background: `linear-gradient(160deg, ${TEMPLATES[id].backdrop[0]}, ${TEMPLATES[id].backdrop[1]})` }}>
+                <span className="template-accent" style={{ background: TEMPLATES[id].accent }} />
+              </span>
+              <span className="label-large">{TEMPLATES[id].name}</span>
+            </button>
+          ))}
+        </div>
+        <p className="body-small muted">{TEMPLATES[template].description}</p>
+      </div>
       <TextField label="Description" type="textarea" rows={3} value={description} onValue={setDescription} maxLength={5000} />
       <TextField label="Scheduled start (optional)" type="datetime-local" value={when} onValue={setWhen} />
       <div>

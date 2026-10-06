@@ -201,6 +201,32 @@ export function Switch({ selected, onChange, label, disabled }: { selected: bool
   );
 }
 
+export interface SliderProps {
+  label: string;
+  value: number;
+  onValue(value: number): void;
+  min: number;
+  max: number;
+  step?: number;
+  /** How the current value is shown next to the label, e.g. "65%". */
+  format?(value: number): string;
+  'data-testid'?: string;
+}
+
+export function Slider({ label, value, onValue, min, max, step = 1, format = String, ...rest }: SliderProps) {
+  const ref = useRef<HTMLElement & { value: number }>(null);
+  useDomEvent(ref, 'input', () => onValue(ref.current!.value));
+  return (
+    <label className="col" style={{ gap: 0 }}>
+      <span className="row" style={{ justifyContent: 'space-between' }}>
+        <span className="body-medium">{label}</span>
+        <span className="label-large muted">{format(value)}</span>
+      </span>
+      <md-slider ref={ref} {...rest} min={min} max={max} step={step} value={value} aria-label={label} style={{ width: '100%' }} />
+    </label>
+  );
+}
+
 export function Checkbox({ checked, onChange, label, disabled }: { checked: boolean; onChange(checked: boolean): void; label: ReactNode; disabled?: boolean }) {
   const ref = useRef<HTMLElement & { checked: boolean }>(null);
   useDomEvent(ref, 'change', () => onChange(ref.current!.checked));

@@ -100,6 +100,14 @@ describe('broadcast lifecycle', () => {
     room = `b_${broadcastId}`;
   });
 
+  it('creates a broadcast that opens in the chosen template', async () => {
+    const created = (await host.call('POST', '/api/broadcasts', { title: 'Match day', template: 'cricket' })).body;
+    const session = (await host.call('POST', `/api/broadcasts/${created.id}/session`)).body;
+    expect(session.scene.template).toBe('cricket');
+    expect(session.scene.brand.color).toBe('#FF9933');
+    expect((await host.call('POST', '/api/broadcasts', { title: 'Bad', template: 'sports' })).status).toBe(400);
+  });
+
   it('marks a broadcast with a start time as scheduled', async () => {
     const res = await host.call('POST', '/api/broadcasts', {
       title: 'Later',

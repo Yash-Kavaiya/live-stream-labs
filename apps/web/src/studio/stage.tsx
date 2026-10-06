@@ -1,4 +1,4 @@
-import { LAYOUT_IDS, LAYOUT_LABELS, type LayoutId, type Scene } from '@studio/shared';
+import type { Scene } from '@studio/shared';
 import { Icon, IconButton } from '@studio/ui';
 import type { Track } from 'livekit-client';
 import { useEffect, useRef, type RefObject } from 'react';
@@ -30,35 +30,6 @@ export function ProgramCanvas({
   }, [scene, drawables]);
 
   return <canvas ref={canvasRef} className="program-canvas" data-testid="program-canvas" aria-label="Program output" />;
-}
-
-const LAYOUT_ICONS: Record<LayoutId, string> = {
-  solo: 'crop_square',
-  grid: 'grid_view',
-  spotlight: 'view_sidebar',
-  pip: 'picture_in_picture',
-  screen: 'present_to_all',
-  cinema: 'view_agenda',
-};
-
-export function LayoutPicker({ value, onChange }: { value: LayoutId; onChange(layout: LayoutId): void }) {
-  return (
-    <div className="segmented" role="group" aria-label="Layout">
-      {LAYOUT_IDS.map((id) => (
-        <button
-          key={id}
-          type="button"
-          title={LAYOUT_LABELS[id]}
-          aria-label={LAYOUT_LABELS[id]}
-          aria-pressed={value === id}
-          data-testid={`layout-${id}`}
-          onClick={() => onChange(id)}
-        >
-          <Icon name={LAYOUT_ICONS[id]} />
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function VideoThumb({ track }: { track: Track }) {

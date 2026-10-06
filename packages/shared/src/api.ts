@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { platformIdSchema } from './platforms';
-import { sceneSchema } from './scene';
+import { sceneSchema, templateIdSchema } from './scene';
 
 // ---------- Auth ----------
 
@@ -62,10 +62,12 @@ export const createBroadcastSchema = z.object({
   description: z.string().trim().max(5000).default(''),
   scheduledAt: z.iso.datetime().nullable().default(null),
   destinationIds: z.array(z.string()).max(20).default([]),
+  /** The look the studio opens with. It can be changed there at any time. */
+  template: templateIdSchema.default('none'),
 });
 export type CreateBroadcastInput = z.input<typeof createBroadcastSchema>;
 
-export const updateBroadcastSchema = createBroadcastSchema.partial();
+export const updateBroadcastSchema = createBroadcastSchema.omit({ template: true }).partial();
 export type UpdateBroadcastInput = z.input<typeof updateBroadcastSchema>;
 
 export interface BroadcastDestinationDto {

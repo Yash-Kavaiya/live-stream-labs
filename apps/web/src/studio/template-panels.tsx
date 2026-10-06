@@ -10,9 +10,11 @@ import {
   type News,
   type NewsView,
   type Scene,
+  type TemplateId,
 } from '@studio/shared';
 import { Button, Icon, TextField } from '@studio/ui';
 import { useState } from 'react';
+import { CleanControls } from './clean-controls';
 
 type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 interface Props {
@@ -223,16 +225,36 @@ function PartyControls({ update }: Props) {
   );
 }
 
-/** The extra controls that belong to whichever template is active. */
-export function TemplateControls(props: Props) {
+/** The studio tab that belongs to each template. */
+export const TEMPLATE_PAGES: Record<TemplateId, { label: string; icon: string }> = {
+  none: { label: 'Layout', icon: 'view_quilt' },
+  newsroom: { label: 'News', icon: 'newspaper' },
+  cricket: { label: 'Cricket', icon: 'sports_cricket' },
+  watchparty: { label: 'Party', icon: 'celebration' },
+};
+
+/** The page of controls for whichever template is active. The clean look's page is the layout designer. */
+export function TemplatePage(props: Props) {
   switch (props.scene.template) {
-    case 'newsroom':
-      return <NewsControls {...props} />;
-    case 'cricket':
-      return <CricketControls {...props} />;
-    case 'watchparty':
-      return <PartyControls {...props} />;
     case 'none':
-      return null;
+      return <CleanControls {...props} />;
+    case 'newsroom':
+      return (
+        <div className="panel-scroll col">
+          <NewsControls {...props} />
+        </div>
+      );
+    case 'cricket':
+      return (
+        <div className="panel-scroll col">
+          <CricketControls {...props} />
+        </div>
+      );
+    case 'watchparty':
+      return (
+        <div className="panel-scroll col">
+          <PartyControls {...props} />
+        </div>
+      );
   }
 }

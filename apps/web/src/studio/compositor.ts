@@ -148,7 +148,7 @@ export class Compositor {
     this.bottomInset = 0;
 
     ctx.globalAlpha = 1;
-    ctx.fillStyle = TEMPLATES.none.backdrop[0];
+    ctx.fillStyle = scene ? this.cleanBackdrop(scene) : TEMPLATES.none.backdrop[0];
     ctx.fillRect(0, 0, size.width, size.height);
     if (!scene) return;
 
@@ -234,34 +234,77 @@ export class Compositor {
     return true;
   }
 
+  /** What sits behind the tiles when no template is on. */
+  private cleanBackdrop(scene: Scene): string | CanvasGradient {
+    const color = scene.brand.color;
+    switch (scene.style.backdrop) {
+      case 'light':
+        return '#eef2f7';
+      case 'brand':
+        return color;
+      case 'gradient': {
+        const gradient = this.ctx.createLinearGradient(0, 0, this.size.width, this.size.height);
+        gradient.addColorStop(0, color);
+        gradient.addColorStop(1, '#0b0c0e');
+        return gradient;
+      }
+      case 'dark':
+        return TEMPLATES.none.backdrop[0];
+    }
+  }
+
+  private tilePath(tile: Tile, inset = 0): void {
+    this.ctx.beginPath();
+    this.ctx.roundRect(tile.x + inset, tile.y + inset, tile.width - 2 * inset, tile.height - 2 * inset, Math.max(0, tile.radius - inset));
+  }
+
   private drawTile(tile: AnimatedTile, scene: Scene, dt: number): void {
     const { ctx, unit } = this;
+    const { style } = scene;
     const isMedia = tile.id === 'media';
     const source = this.sources.get(tile.id);
     const frame = isMedia ? this.images.get(scene.media?.url) : (source?.frame ?? null);
     const label = source?.label ?? '';
     const isCam = parseSourceId(tile.id).kind === 'cam';
+    const fit = isCam ? style.cameraFit : tile.fit;
+    const fullBleed = tile.width >= this.size.width && tile.height >= this.size.height;
 
     ctx.save();
     ctx.globalAlpha *= Math.min(1, Math.max(0, tile.opacity));
-    ctx.beginPath();
-    ctx.roundRect(tile.x, tile.y, tile.width, tile.height, tile.radius);
+
+    if (style.shadow && !fullBleed) {
+      // A soft shadow built from a few widening, faint outlines. A real blurred shadow per tile
+      // per frame costs far more than everything else in the picture.
+      ctx.fillStyle = 'rgb(0 0 0 / 0.09)';
+      for (let i = 1; i <= 4; i++) {
+        const spread = i * unit * 0.45;
+        ctx.beginPath();
+        ctx.roundRect(tile.x - spread, tile.y - spread + unit * 0.9, tile.width + 2 * spread, tile.height + 2 * spread, tile.radius + spread);
+        ctx.fill();
+      }
+    }
+
     ctx.save();
+    this.tilePath(tile);
     ctx.clip();
-    ctx.fillStyle = tile.fit === 'contain' ? '#000000' : TILE_EMPTY;
+    ctx.fillStyle = fit === 'contain' ? '#000000' : TILE_EMPTY;
     ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
 
-    const drawn = frame ? this.drawFrame(frame, tile) : false;
+    const drawn = frame ? this.drawFrame(frame, { ...tile, fit }) : false;
     if (!drawn && !isMedia) this.drawNameCard(tile, label, scene.brand.color);
-    if (scene.brand.showNames && isCam && label && tile.height > unit * 22) {
-      this.drawNameTag(tile, label, scene.brand.color);
-    }
+    if (scene.brand.showNames && isCam && label && tile.height > unit * 22) this.drawNameTag(tile, label, scene);
     ctx.restore();
 
-    // Themed looks frame each tile so it reads against the gradient.
-    if (scene.template !== 'none' && tile.radius > 0) {
+    if (style.border !== 'none' && !fullBleed) {
+      ctx.lineWidth = unit * (style.border === 'thick' ? 1 : 0.45);
+      ctx.strokeStyle = style.borderColor === 'brand' ? scene.brand.color : '#ffffff';
+      this.tilePath(tile, ctx.lineWidth / 2);
+      ctx.stroke();
+    } else if (scene.template !== 'none' && tile.radius > 0) {
+      // Themed looks frame each tile faintly so it reads against the gradient.
       ctx.strokeStyle = 'rgb(255 255 255 / 0.22)';
       ctx.lineWidth = unit * 0.3;
+      this.tilePath(tile);
       ctx.stroke();
     }
 
@@ -271,9 +314,7 @@ export class Compositor {
       ctx.strokeStyle = SPEAKING;
       ctx.lineWidth = unit * 0.9;
       // Inset by half the line so a full-bleed tile still shows the whole ring.
-      const inset = ctx.lineWidth / 2;
-      ctx.beginPath();
-      ctx.roundRect(tile.x + inset, tile.y + inset, tile.width - 2 * inset, tile.height - 2 * inset, Math.max(0, tile.radius - inset));
+      this.tilePath(tile, ctx.lineWidth / 2);
       ctx.stroke();
     }
     ctx.restore();
@@ -308,29 +349,61 @@ export class Compositor {
     ctx.fillText((label.trim()[0] ?? '?').toUpperCase(), cx, cy + r * 0.05);
   }
 
-  private drawNameTag(tile: Tile, label: string, color: string): void {
+  /** The participant's name on their tile, in the style and position the host chose. */
+  private drawNameTag(tile: Tile, label: string, scene: Scene): void {
     const { ctx, unit } = this;
+    const { nameStyle, namePosition } = scene.style;
+    const color = scene.brand.color;
     const fontSize = Math.max(unit * 2.2, Math.min(unit * 3.4, tile.height * 0.075));
+    const margin = fontSize * 0.6;
     const padX = fontSize * 0.7;
     const height = fontSize * 1.9;
+    const top = namePosition === 'top-left';
     ctx.font = `500 ${fontSize}px ${FONT}`;
-    const text = ellipsize(this.ctx, label, tile.width * 0.7 - padX * 2);
-    const width = ctx.measureText(text).width + padX * 2;
-    const x = tile.x + fontSize * 0.6;
-    const y = tile.y + tile.height - height - fontSize * 0.6;
+    const text = ellipsize(ctx, label, tile.width * 0.7 - padX * 2);
+    const textWidth = ctx.measureText(text).width;
+
+    const y = top ? tile.y + margin : tile.y + tile.height - height - margin;
+    const centred = namePosition === 'bottom-center';
+    const x = centred ? tile.x + (tile.width - textWidth - padX * 2) / 2 : tile.x + margin;
 
     // A banner covers the bottom-left of the frame; fade out a name tag it would sit on.
     const covered = y + height > this.bannerZone.top && x < this.size.width * 0.8;
     ctx.save();
     if (covered) ctx.globalAlpha *= 1 - this.bannerZone.alpha;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, height, height / 2);
-    ctx.fill();
-    ctx.fillStyle = readableOn(color);
-    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + padX, y + height / 2 + fontSize * 0.04);
+
+    if (nameStyle === 'bar') {
+      // A strip across the tile's edge that fades into the picture.
+      const barH = height * 1.5;
+      const barY = top ? tile.y : tile.y + tile.height - barH;
+      const gradient = ctx.createLinearGradient(0, barY, 0, barY + barH);
+      gradient.addColorStop(top ? 0 : 1, 'rgb(0 0 0 / 0.72)');
+      gradient.addColorStop(top ? 1 : 0, 'rgb(0 0 0 / 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(tile.x, barY, tile.width, barH);
+      ctx.fillStyle = color;
+      ctx.fillRect(centred ? tile.x + tile.width / 2 - unit * 3 : tile.x + margin, top ? y + height - unit * 0.3 : y + height - unit * 0.1, unit * 6, unit * 0.5);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = centred ? 'center' : 'left';
+      ctx.fillText(text, centred ? tile.x + tile.width / 2 : tile.x + margin, y + height / 2 - unit * 0.3);
+    } else if (nameStyle === 'text') {
+      // Bare text with a hard offset copy behind it for contrast.
+      ctx.textAlign = 'left';
+      ctx.font = `700 ${fontSize}px ${FONT}`;
+      ctx.fillStyle = 'rgb(0 0 0 / 0.7)';
+      ctx.fillText(text, x + padX * 0.2 + unit * 0.25, y + height / 2 + unit * 0.25);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(text, x + padX * 0.2, y + height / 2);
+    } else {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(x, y, textWidth + padX * 2, height, height / 2);
+      ctx.fill();
+      ctx.fillStyle = readableOn(color);
+      ctx.textAlign = 'left';
+      ctx.fillText(text, x + padX, y + height / 2 + fontSize * 0.04);
+    }
     ctx.restore();
   }
 

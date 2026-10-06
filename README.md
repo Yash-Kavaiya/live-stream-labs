@@ -32,7 +32,12 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 ## What is in the studio
 
 - **Stage and backstage.** Everyone joins backstage; the host adds sources to the stage.
-- **Layouts.** Solo, grid, spotlight, picture in picture, screen + sidebar, cinema.
+- **Layouts.** Ten of them: solo, grid, side by side, stacked, lead + guests, mosaic, spotlight,
+  picture in picture, screen + sidebar, cinema.
+- **Layout page.** Tune spacing, margins, corners, main-tile size, sidebar side, picture-in-picture
+  corner and size, crop or fit, borders, shadow, backdrop and name-tag style.
+- **A page per template.** News, Cricket and Party each have their own tab; a new broadcast can
+  start from any of them.
 - **Smooth transitions.** Tiles glide between layouts; people, banners, comments and holding
   screens fade in and out.
 - **Auto director.** Guests go on stage as they join (up to a number you set, 3 by default), the

@@ -123,7 +123,7 @@
 .studio-back { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--md-sys-color-on-surface); }
 .studio-back:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
 
-.studio-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 0 12px 12px; min-height: 0; }
+.studio-body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; padding: 0 12px 12px; min-height: 0; }
 .studio-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: auto; padding: 16px; background: var(--md-sys-color-surface); border-radius: var(--md-sys-shape-corner-extra-large); }
 .studio-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--md-sys-color-surface); border-radius: var(--md-sys-shape-corner-extra-large); }
 .studio-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -207,7 +207,7 @@
 }
 
 /* Five tabs share the side panel. */
-.studio-side md-primary-tab { min-width: 0; }
+.studio-side md-primary-tab { min-width: 0; --md-primary-tab-label-text-size: 0.75rem; }
 
 .screen-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .screen-button { display: grid; justify-items: center; gap: 4px; padding: 10px 2px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; transition: background 0.2s var(--app-motion-standard); }
@@ -222,6 +222,23 @@
 .timer-chip:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
 
 .template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.template-grid.four { grid-template-columns: repeat(4, 1fr); }
+
+.layout-thumb { display: block; width: 100%; border-radius: 4px; background: var(--md-sys-color-surface-container-highest); }
+.layout-thumb rect { fill: var(--md-sys-color-outline); }
+.layout-thumb rect.main { fill: var(--md-sys-color-primary); }
+
+.layout-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.layout-chip { width: 56px; padding: 4px; border: 2px solid transparent; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container); cursor: pointer; transition: border-color 0.15s var(--app-motion-standard), background 0.15s var(--app-motion-standard); }
+.layout-chip:hover { background: var(--md-sys-color-surface-container-high); }
+.layout-chip[aria-pressed='true'], .layout-card[aria-pressed='true'] { border-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.layout-chip:focus-visible, .layout-card:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
+.layout-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.layout-card { display: grid; gap: 6px; padding: 6px 6px 8px; border: 2px solid transparent; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); text-align: center; cursor: pointer; transition: border-color 0.15s var(--app-motion-standard), background 0.15s var(--app-motion-standard); }
+.layout-card:hover { background: var(--md-sys-color-surface-container-high); }
+
+md-slider { --md-slider-handle-width: 16px; --md-slider-handle-height: 16px; margin-inline: -8px; }
 .template-card { display: flex; flex-direction: column; gap: 6px; padding: 6px 6px 8px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; text-align: left; transition: background 0.2s var(--app-motion-standard), border-color 0.2s var(--app-motion-standard); }
 .template-card:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); }
 .template-card[aria-pressed='true'] { border-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
