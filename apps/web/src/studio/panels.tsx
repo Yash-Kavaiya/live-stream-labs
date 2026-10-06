@@ -4,6 +4,8 @@ import {
   MAX_ON_STAGE,
   PLATFORMS,
   SCREEN_IDS,
+  setScreen,
+  setScreenTimer,
   TEMPLATE_IDS,
   TEMPLATES,
   type AutoDirector,
@@ -263,6 +265,9 @@ export function ChatPanel({ chat, onSend }: { chat: ChatEntry[]; onSend(text: st
 
 // ---------- Scenes: holding screens, templates, auto director ----------
 
+/** Quick picks for the countdown, in minutes. 0 turns it off. */
+const TIMER_MINUTES = [0, 1, 2, 5, 10];
+
 const SCREEN_BUTTONS: Record<ScreenId, { label: string; icon: string }> = {
   live: { label: 'Live', icon: 'videocam' },
   starting: { label: 'Starting', icon: 'hourglass_top' },
@@ -288,12 +293,39 @@ export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpda
               className="screen-button"
               aria-pressed={scene.screen === id}
               data-testid={`screen-${id}`}
-              onClick={() => update((s) => ({ ...s, screen: id }))}
+              onClick={() => update((s) => setScreen(s, id))}
             >
               <Icon name={SCREEN_BUTTONS[id].icon} />
               <span className="label-medium">{SCREEN_BUTTONS[id].label}</span>
             </button>
           ))}
+        </div>
+        <div className="col" style={{ gap: 8 }}>
+          <span className="body-medium">Countdown on Starting and BRB</span>
+          <div className="timer-row" role="group" aria-label="Countdown length">
+            {TIMER_MINUTES.map((minutes) => (
+              <button
+                key={minutes}
+                type="button"
+                className="timer-chip"
+                aria-pressed={scene.screenTimerSec === minutes * 60}
+                data-testid={`timer-${minutes}`}
+                onClick={() => update((s) => setScreenTimer(s, minutes * 60))}
+              >
+                {minutes === 0 ? 'Off' : `${minutes} min`}
+              </button>
+            ))}
+          </div>
+          <TextField
+            label="Or type the minutes"
+            value={scene.screenTimerSec ? String(Math.round((scene.screenTimerSec / 60) * 10) / 10) : ''}
+            onValue={(text) => {
+              const minutes = Number.parseFloat(text.replace(',', '.'));
+              update((s) => setScreenTimer(s, Number.isFinite(minutes) ? Math.min(360, Math.max(0, minutes)) * 60 : 0));
+            }}
+            placeholder="No countdown"
+            data-testid="timer-custom"
+          />
         </div>
         <TextField
           label="Message on the holding screen"
@@ -304,7 +336,8 @@ export function ScenesPanel({ scene, update }: { scene: Scene; update: SceneUpda
         />
         <p className="body-small muted">
           Starting, BRB and Ending cover the stage and mute everyone for viewers. You can still talk
-          to your guests.
+          to your guests. The countdown starts when the screen comes up; you go back to Live
+          yourself when you are ready.
         </p>
       </section>
 

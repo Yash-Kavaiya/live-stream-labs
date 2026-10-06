@@ -6,6 +6,8 @@ import {
   fitRect,
   parseSourceId,
   PROGRAM_SIZE,
+  formatCountdown,
+  hasCountdown,
   SCREEN_LABELS,
   TEMPLATES,
   TileAnimator,
@@ -59,6 +61,13 @@ function frameSize(frame: HTMLVideoElement | HTMLImageElement): Size | null {
   return width > 0 && height > 0 ? { width, height } : null;
 }
 
+/** What a holding screen shows. `endsAt` is the countdown target (epoch ms), or null for none. */
+interface HoldingScreen {
+  screen: ScreenId;
+  message: string;
+  endsAt: number | null;
+}
+
 /** An overlay that keeps drawing its last content while it fades out. */
 class FadingOverlay<T> {
   private readonly fade = new Fade();
@@ -89,7 +98,7 @@ export class Compositor {
   private readonly speakingRings = new Map<string, Fade>();
   private readonly banner = new FadingOverlay<Banner>();
   private readonly comment = new FadingOverlay<OnScreenComment>();
-  private readonly holding = new FadingOverlay<{ screen: ScreenId; message: string }>();
+  private readonly holding = new FadingOverlay<HoldingScreen>();
   private readonly themed = new FadingOverlay<TemplateId>();
   private readonly newsHeadline = new FadingOverlay<string>();
   /** The celebration being played, by id, and when (on the draw clock) it started here. */
@@ -186,7 +195,9 @@ export class Compositor {
     this.drawCelebrationLayer(scene, now);
 
     const holding = this.holding.step(
-      scene.screen === 'live' ? null : { screen: scene.screen, message: scene.screenMessage },
+      scene.screen === 'live'
+        ? null
+        : { screen: scene.screen, message: scene.screenMessage, endsAt: scene.screenEndsAt },
       dt,
     );
     if (holding) this.withAlpha(holding.alpha, () => this.drawHoldingScreen(holding.value, scene, now));
@@ -510,7 +521,7 @@ export class Compositor {
   }
 
   /** Starting soon / Be right back / Thanks for watching: covers the whole frame. */
-  private drawHoldingScreen(holding: { screen: ScreenId; message: string }, scene: Scene, now: number): void {
+  private drawHoldingScreen(holding: HoldingScreen, scene: Scene, now: number): void {
     const { ctx, unit, size } = this;
     const color = scene.brand.color;
     const backdrop = scene.template === 'none' ? (['#17191c', '#0b0c0e'] as [string, string]) : TEMPLATES[scene.template].backdrop;
@@ -544,6 +555,22 @@ export class Compositor {
       ctx.fillStyle = 'rgb(255 255 255 / 0.82)';
       ctx.fillText(ellipsize(this.ctx, holding.message, size.width * 0.8), cx, y);
       y += unit * 8;
+    }
+
+    if (holding.endsAt !== null && hasCountdown(holding.screen)) {
+      // Countdown: big digits, then a short line once it runs out so the screen never shows 0:00.
+      const left = holding.endsAt - Date.now();
+      ctx.fillStyle = '#ffffff';
+      if (left > 0) {
+        y += unit * 6;
+        ctx.font = `700 ${unit * 15}px ${FONT}`;
+        ctx.fillText(formatCountdown(left), cx, y);
+      } else {
+        y += unit * 2;
+        ctx.font = `500 ${unit * 5}px ${FONT}`;
+        ctx.fillText(holding.screen === 'starting' ? 'Starting any moment' : 'Back any moment', cx, y);
+      }
+      return;
     }
 
     if (holding.screen !== 'ending') {

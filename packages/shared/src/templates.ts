@@ -77,3 +77,31 @@ export function applyTemplate(scene: Scene, id: TemplateId): Scene {
     layout: pickAutoLayout(scene.stage, { followSpeaker: scene.auto.followSpeaker, template: id }),
   };
 }
+
+/** The screens that can run a countdown. */
+export function hasCountdown(screen: ScreenId): boolean {
+  return screen === 'starting' || screen === 'brb';
+}
+
+/**
+ * Switches what viewers see. Going to Starting or BRB starts the countdown, if one is set;
+ * any other screen clears it.
+ */
+export function setScreen(scene: Scene, screen: ScreenId, now = Date.now()): Scene {
+  const timed = hasCountdown(screen) && scene.screenTimerSec > 0;
+  return { ...scene, screen, screenEndsAt: timed ? now + scene.screenTimerSec * 1000 : null };
+}
+
+/** Changes the countdown length; if a countdown screen is showing, it restarts from the new length. */
+export function setScreenTimer(scene: Scene, seconds: number, now = Date.now()): Scene {
+  return setScreen({ ...scene, screenTimerSec: Math.max(0, Math.round(seconds)) }, scene.screen, now);
+}
+
+/** 299_400 ms -> "5:00", 61_000 -> "1:01", 3_725_000 -> "1:02:05". Never negative. */
+export function formatCountdown(msLeft: number): string {
+  const total = Math.max(0, Math.ceil(msLeft / 1000));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(total % 60)}` : `${minutes}:${pad(total % 60)}`;
+}

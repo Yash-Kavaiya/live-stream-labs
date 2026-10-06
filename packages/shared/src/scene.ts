@@ -208,6 +208,10 @@ export const sceneSchema = z.object({
   template: templateIdSchema.default('none').catch('none'),
   screen: screenIdSchema.default('live'),
   screenMessage: z.string().max(80).default(''),
+  /** Length of the countdown on the Starting and BRB screens, in seconds. 0 means no countdown. */
+  screenTimerSec: z.number().int().min(0).max(6 * 60 * 60).default(0),
+  /** When the running countdown reaches zero (epoch ms), so every client shows the same time. */
+  screenEndsAt: z.number().nullable().default(null),
   auto: autoSchema.default(DEFAULT_AUTO),
   news: newsSchema.default(DEFAULT_NEWS),
   cricket: cricketSchema.default(DEFAULT_CRICKET),
@@ -226,6 +230,8 @@ export const DEFAULT_SCENE: Scene = {
   template: 'none',
   screen: 'live',
   screenMessage: '',
+  screenTimerSec: 0,
+  screenEndsAt: null,
   auto: DEFAULT_AUTO,
   news: DEFAULT_NEWS,
   cricket: DEFAULT_CRICKET,

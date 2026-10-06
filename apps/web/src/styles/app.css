@@ -215,6 +215,12 @@
 .screen-button[aria-pressed='true'] { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .screen-button:focus-visible, .template-card:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
 
+.timer-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.timer-chip { height: 32px; padding: 0 12px; border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-small); background: transparent; color: var(--md-sys-color-on-surface); font: 500 0.875rem/1 var(--md-ref-typeface-plain); cursor: pointer; }
+.timer-chip:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.timer-chip[aria-pressed='true'] { border-color: transparent; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.timer-chip:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
 .template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .template-card { display: flex; flex-direction: column; gap: 6px; padding: 6px 6px 8px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; color: var(--md-sys-color-on-surface); cursor: pointer; text-align: left; transition: background 0.2s var(--app-motion-standard), border-color 0.2s var(--app-motion-standard); }
 .template-card:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); }

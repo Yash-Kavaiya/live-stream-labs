@@ -44,6 +44,7 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 - **Watch party.** Shared video on top, emoji reactions, and a winner celebration with trophy and
   confetti.
 - **Holding screens.** Starting soon, Be right back, Thanks for watching. They mute the stream.
+  Starting and BRB can show a countdown timer.
 - **Guests.** Invite link, no account; camera and microphone check before joining. The host can
   mute or remove a guest.
 - **Sharing.** Screen with audio, an image, or a video clip.

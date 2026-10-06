@@ -3,7 +3,7 @@ import { cricketStats, oversText, recordBall, type Ball } from './cricket';
 import { PROGRAM_SIZE, type Tile } from './layout';
 import { DEFAULT_AUTO, DEFAULT_CRICKET, DEFAULT_SCENE, NEWS_VIEWS, normalizeScene, type Cricket } from './scene';
 import { CRICKET_STRIP, computeSceneLayout, newsSafeArea, newsSidePanel } from './scene-layout';
-import { applyTemplate, TEMPLATES } from './templates';
+import { applyTemplate, formatCountdown, setScreen, setScreenTimer, TEMPLATES } from './templates';
 
 const cams = (n: number) => Array.from({ length: n }, (_, i) => `cam:p${i}`);
 const play = (c: Cricket, balls: Ball[]) => balls.reduce(recordBall, c);
@@ -159,5 +159,37 @@ describe('cricket scoring', () => {
 
     const lost = play({ ...DEFAULT_CRICKET, oversLimit: 1, target: 10 }, [1, 1, 1, 1, 1, 1]);
     expect(cricketStats(lost).summary).toBe('AUS won by 3 runs');
+  });
+});
+
+describe('holding-screen countdown', () => {
+  const NOW = 1_000_000;
+  const fiveMinutes = { ...DEFAULT_SCENE, screenTimerSec: 300 };
+
+  it('starts when a countdown screen comes up and clears on the others', () => {
+    expect(setScreen(fiveMinutes, 'starting', NOW).screenEndsAt).toBe(NOW + 300_000);
+    expect(setScreen(fiveMinutes, 'brb', NOW).screenEndsAt).toBe(NOW + 300_000);
+    expect(setScreen(fiveMinutes, 'ending', NOW).screenEndsAt).toBeNull();
+    expect(setScreen(setScreen(fiveMinutes, 'brb', NOW), 'live', NOW).screenEndsAt).toBeNull();
+  });
+
+  it('stays off when no length is set', () => {
+    expect(setScreen(DEFAULT_SCENE, 'starting', NOW).screenEndsAt).toBeNull();
+  });
+
+  it('restarts when the length changes during a countdown, and only then', () => {
+    const running = setScreen(fiveMinutes, 'starting', NOW);
+    expect(setScreenTimer(running, 60, NOW + 5000).screenEndsAt).toBe(NOW + 65_000);
+    expect(setScreenTimer(running, 0, NOW).screenEndsAt).toBeNull();
+    expect(setScreenTimer(DEFAULT_SCENE, 120, NOW)).toMatchObject({ screenTimerSec: 120, screenEndsAt: null });
+  });
+
+  it('formats the time left, rounding up so it never shows 0:00 early', () => {
+    expect(formatCountdown(299_400)).toBe('5:00');
+    expect(formatCountdown(61_000)).toBe('1:01');
+    expect(formatCountdown(400)).toBe('0:01');
+    expect(formatCountdown(0)).toBe('0:00');
+    expect(formatCountdown(-5000)).toBe('0:00');
+    expect(formatCountdown(3_725_000)).toBe('1:02:05');
   });
 });
