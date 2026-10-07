@@ -30,6 +30,14 @@ Install ffmpeg with `winget install Gyan.FFmpeg` (Windows), `brew install ffmpeg
 
 ### Windows (PowerShell)
 
+In short:
+
+- **Start:** `npm run dev` — the full stack with the LiveKit that runs on this computer.
+- **Stop a stuck stack:** the PowerShell one-liner below, which kills whatever is holding ports
+  5173, 7880, 1935, 4000 and 4100.
+- **Start without LiveKit:** `$env:NO_LOCAL_LIVEKIT = '1'; npm run dev` — the studio then fails
+  with "Something went wrong".
+
 Start the whole stack, with the LiveKit server that runs on this computer (no LiveKit Cloud, no
 account). Keep the window open, then open <http://localhost:5173>:
 
