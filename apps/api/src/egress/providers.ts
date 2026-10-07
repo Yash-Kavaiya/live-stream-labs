@@ -82,7 +82,7 @@ export class LiveKitEgress implements EgressProvider {
       },
       {
         customBaseUrl: `${this.config.webOrigin}/render`,
-        encodingOptions: EncodingOptionsPreset.H264_720P_30,
+        encodingOptions: EncodingOptionsPreset.H264_1080P_30,
       },
     );
     return { ingestUrl: null, externalId: info.egressId };

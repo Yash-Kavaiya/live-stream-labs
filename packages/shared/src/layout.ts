@@ -48,7 +48,8 @@ export const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
   pipSize: 0.2,
 };
 
-export const PROGRAM_SIZE: Size = { width: 1280, height: 720 };
+/** The program is composed, streamed and recorded at 1080p. */
+export const PROGRAM_SIZE: Size = { width: 1920, height: 1080 };
 
 export const ASPECT = 16 / 9;
 

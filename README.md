@@ -119,8 +119,8 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 - **Daily AI news rundown.** A full show written every day at 5 PM India time, run from the News
   tab with a teleprompter; see below.
 - **Cricket.** Follows a real match or is scored by hand; see below.
-- **Watch party.** Shared video on top, emoji reactions, and a winner celebration with trophy and
-  confetti.
+- **Watch party.** A queue of video files and links, a now-playing bar, polls answered in chat,
+  chat reactions with a hype meter, a scoreboard, and a winner celebration; see below.
 - **Holding screens.** Starting soon, Be right back, Thanks for watching. They silence the
   stream. Starting and BRB can show a countdown timer.
 - **Guests.** Invite link, no account; camera and microphone check before joining. The host can
@@ -208,6 +208,29 @@ sign-off read them out.
   stream beside you (Anchor scene, with only you on stage).
 - **Add a link** attaches a post or page of your own to the item on air.
 - **Full script** opens the whole show on one page, for reading ahead or printing.
+
+## Watch party
+
+Choose the **Watch party** template on the Scenes tab, then open the **Party** tab.
+
+- **Queue.** Add video files (MP4 or WebM) and links, and put them in order. Files play inside the
+  studio as the main picture, with pause, seek, restart and volume. They are not uploaded: they
+  stay on your computer, so after a page reload each file has to be chosen again. A link (YouTube,
+  X, any page) opens in its own window; share that window, with its sound, using the screen share
+  button, and control it there.
+- **Now playing.** A bar along the top shows the title, the time played and what comes next. When
+  a file ends, an "Up next" card counts down five seconds and the next file starts. Playback stops
+  at a link, because a window cannot be opened without a click.
+- **Polls.** Ask a question with two to four answers. Viewers vote by typing the answer's number
+  in chat, one vote each; you can add votes by hand. Closing the poll highlights the winner.
+- **Reactions.** Emoji that viewers send in chat float up over the video and fill the hype meter.
+  The reaction buttons do the same from the studio.
+- **Scoreboard.** Add the people on stage or type names, give and take points, show the board on
+  screen, and celebrate the leader with the trophy.
+
+Votes and reactions from chat need you to be live, and come from Twitch (any Twitch destination)
+and from YouTube when it is connected with one click, which needs a Google OAuth app in `.env`.
+Votes by hand and the reaction buttons work without any of that.
 
 ## Commands
 

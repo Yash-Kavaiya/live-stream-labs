@@ -24,7 +24,8 @@ function showsCamera(page: Page): Promise<boolean> {
     const probe = document.createElement('canvas');
     probe.width = probe.height = 1;
     const ctx = probe.getContext('2d')!;
-    ctx.drawImage(canvas, 480, 300, 1, 1, 0, 0, 1, 1);
+    // The same spot in the frame whatever size the program is drawn at.
+    ctx.drawImage(canvas, Math.round(canvas.width * 0.375), Math.round(canvas.height * 0.417), 1, 1, 0, 0, 1, 1);
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
     return g! > r! + 40 && g! > b! + 40;
   });
@@ -122,6 +123,8 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await page.getByTestId('tab-template').click();
   // A new cricket scene follows a live match; this test scores by hand.
   await page.getByTestId('cricket-source-manual').click();
+  // The live feed may already have filled in a finished match: start a fresh innings.
+  await page.getByTestId('cricket-reset').click();
   await page.getByTestId('ball-4').click();
   await page.getByTestId('ball-W').click();
   await expect(page.getByTestId('cricket-score')).toContainText('4/1');

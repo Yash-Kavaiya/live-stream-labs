@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_PARTY, partySchema } from './party';
 
 export const LAYOUT_IDS = [
   'solo',
@@ -395,6 +396,7 @@ export const sceneSchema = z.object({
   style: layoutStyleSchema.default(DEFAULT_STYLE),
   activeBannerIds: z.array(z.string().max(40)).max(8).default([]),
   music: z.array(musicTrackSchema).max(MAX_MUSIC_TRACKS).default([]),
+  party: partySchema.default(DEFAULT_PARTY),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -418,6 +420,7 @@ export const DEFAULT_SCENE: Scene = {
   style: DEFAULT_STYLE,
   activeBannerIds: [],
   music: [],
+  party: DEFAULT_PARTY,
 };
 
 /** Parses a stored or received scene, filling in fields that older scenes do not have. */

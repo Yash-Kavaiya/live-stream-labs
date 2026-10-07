@@ -26,7 +26,8 @@ import { drawBadge, drawCta, drawHeadline, drawLowerThird, drawNameTitle, drawSo
 import { CELEBRATION_MS, drawCelebration } from './graphics/celebration';
 import { drawCricketBug, drawCricketCard, drawCricketDashboard, drawCricketSplit, drawCricketStrip } from './graphics/cricket';
 import { drawNews } from './graphics/news';
-import { drawPill, ellipsize, FONT, readableOn, wrapText, type Painter } from './graphics/painter';
+import { PartyLayer } from './graphics/party';
+import { ellipsize, FONT, readableOn, wrapText, type Painter } from './graphics/painter';
 
 /** What the compositor needs to know about a source to draw it. */
 export interface DrawableSource {
@@ -113,10 +114,12 @@ export class Compositor {
   private readonly newsHeadline = new FadingOverlay<string>();
   /** The celebration being played, by id, and when (on the draw clock) it started here. */
   private celebration: { id: string; startedAt: number } | null = null;
+  private readonly party = new PartyLayer();
   private scene: Scene | null = null;
   private sources = new Map<string, DrawableSource>();
   private ticker: Worker | null = null;
   private lastDraw = 0;
+  private stats = { since: 0, frames: 0, drawMs: 0 };
   /** Height already taken at the bottom edge by full-width strips, so later overlays stack above. */
   private bottomInset = 0;
   /** Where the lower-third banner sat last frame and how visible it was; name tags under it step aside. */
@@ -140,9 +143,29 @@ export class Compositor {
   start(): void {
     if (this.ticker) return;
     this.ticker = new Worker(new URL('./ticker.worker.ts', import.meta.url), { type: 'module' });
-    this.ticker.onmessage = () => this.draw(performance.now());
+    this.ticker.onmessage = () => {
+      const started = performance.now();
+      this.draw(started);
+      this.measure(started, performance.now() - started);
+    };
     this.ticker.postMessage(1000 / FPS);
     this.draw(performance.now());
+  }
+
+  /**
+   * Once a second, writes how many frames were drawn and how long one takes onto the canvas
+   * (`data-fps`, `data-draw-ms`). A stream that stutters starts here when the computer cannot
+   * draw thirty frames a second, and this is the number that shows it.
+   */
+  private measure(now: number, drawMs: number): void {
+    const stats = this.stats;
+    stats.frames += 1;
+    stats.drawMs += drawMs;
+    const elapsed = now - stats.since;
+    if (elapsed < 1000) return;
+    this.canvas.dataset.fps = ((stats.frames * 1000) / elapsed).toFixed(1);
+    this.canvas.dataset.drawMs = (stats.drawMs / stats.frames).toFixed(1);
+    this.stats = { since: now, frames: 0, drawMs: 0 };
   }
 
   stop(): void {
@@ -469,7 +492,7 @@ export class Compositor {
     if (template === 'newsroom') {
       drawNews(this.painter, scene, { ...news, now });
     } else if (template === 'watchparty') {
-      drawPill(this.painter, unit * 3, unit * 3, 'WATCH PARTY', scene.brand.color, readableOn(scene.brand.color), now);
+      this.party.draw(this.painter, scene, now, Date.now());
     } else if (template === 'cricket' && scene.cricket.view === 'dashboard') {
       drawCricketDashboard(this.painter, scene, news.sideOccupied || scene.stage.length > 0);
     } else if (template === 'cricket' && scene.cricket.view === 'card') {

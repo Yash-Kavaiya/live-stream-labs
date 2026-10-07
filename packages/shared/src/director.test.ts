@@ -32,7 +32,7 @@ describe('TileAnimator', () => {
 
     const mid = animator.step(computeLayout('grid', ['cam:a', 'cam:b']), FRAME).find((t) => t.id === 'cam:a')!;
     expect(mid.width).toBeGreaterThan(target.width);
-    expect(mid.width).toBeLessThan(1280);
+    expect(mid.width).toBeLessThan(1920);
 
     const end = run(animator, computeLayout('grid', ['cam:a', 'cam:b']), 45).find((t) => t.id === 'cam:a')!;
     expect(end.width).toBeCloseTo(target.width, 0);

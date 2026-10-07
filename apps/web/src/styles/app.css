@@ -378,3 +378,13 @@ md-slider { --md-slider-handle-width: 16px; --md-slider-handle-height: 16px; mar
   .script-item { break-inside: avoid; }
   .script-page .muted, .script-tag, .script-item h3, .script-item a { color: #333333 !important; }
 }
+
+/* Watch party */
+.party-item { flex-direction: column; align-items: stretch; }
+.party-row { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 4px 4px 4px 8px; }
+.party-row > md-icon { flex: none; margin: 0 4px; }
+.party-note { padding: 0 12px 10px 46px; }
+.party-vote { padding: 2px 0; gap: 6px; }
+.party-leading { font-weight: 700; color: var(--md-sys-color-primary); }
+.party-seek { width: 100%; accent-color: var(--md-sys-color-primary); }
+.file-button.disabled { opacity: 0.5; pointer-events: none; }

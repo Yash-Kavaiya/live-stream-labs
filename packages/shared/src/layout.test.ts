@@ -45,7 +45,7 @@ describe('computeLayout', () => {
 
   it('solo fills the canvas with the first source', () => {
     expect(computeLayout('solo', cams(3))).toEqual([
-      { id: 'cam:p0', x: 0, y: 0, width: 1280, height: 720, fit: 'cover', radius: 0 },
+      { id: 'cam:p0', x: 0, y: 0, width: 1920, height: 1080, fit: 'cover', radius: 0 },
     ]);
   });
 
@@ -66,7 +66,7 @@ describe('computeLayout', () => {
 
   it('pip draws the main source full-bleed underneath the small tiles', () => {
     const tiles = computeLayout('pip', ['cam:a', 'screen:b']);
-    expect(tiles[0]).toMatchObject({ id: 'screen:b', x: 0, y: 0, width: 1280, height: 720 });
+    expect(tiles[0]).toMatchObject({ id: 'screen:b', x: 0, y: 0, width: 1920, height: 1080 });
     expect(tiles[1]!.id).toBe('cam:a');
   });
 
@@ -107,13 +107,13 @@ describe('two-person and custom layouts', () => {
 
   it('honours spacing, margin and corner options', () => {
     const tight = computeLayout('split', cams(2), PROGRAM_SIZE, { gap: 0, padding: 0, radius: 0 });
-    expect(tight[0]).toMatchObject({ x: 0, y: 0, width: 640, height: 720, radius: 0 });
-    expect(tight[1]!.x).toBe(640);
+    expect(tight[0]).toMatchObject({ x: 0, y: 0, width: 960, height: 1080, radius: 0 });
+    expect(tight[1]!.x).toBe(960);
 
     const roomy = computeLayout('split', cams(2), PROGRAM_SIZE, { gap: 6, padding: 10, radius: 8 });
-    expect(roomy[0]!.x).toBe(72);
-    expect(roomy[1]!.x - (roomy[0]!.x + roomy[0]!.width)).toBeCloseTo(43, 0);
-    expect(roomy[0]!.radius).toBe(58);
+    expect(roomy[0]!.x).toBe(108);
+    expect(roomy[1]!.x - (roomy[0]!.x + roomy[0]!.width)).toBeCloseTo(64.8, 0);
+    expect(roomy[0]!.radius).toBe(86);
   });
 
   it('moves the sidebar and resizes the main tile', () => {
@@ -128,9 +128,9 @@ describe('two-person and custom layouts', () => {
 
   it('places picture-in-picture tiles in the chosen corner at the chosen size', () => {
     const topLeft = computeLayout('pip', ['screen:a', 'cam:a'], PROGRAM_SIZE, { pipCorner: 'tl', pipSize: 0.3 })[1]!;
-    expect(topLeft.x).toBeLessThan(40);
-    expect(topLeft.y).toBeLessThan(40);
-    expect(topLeft.width).toBe(384);
+    expect(topLeft.x).toBeLessThan(60);
+    expect(topLeft.y).toBeLessThan(60);
+    expect(topLeft.width).toBe(576);
 
     const bottomRight = computeLayout('pip', ['screen:a', 'cam:a'])[1]!;
     expect(bottomRight.x + bottomRight.width).toBeGreaterThan(1240);

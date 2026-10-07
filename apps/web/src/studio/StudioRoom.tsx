@@ -25,6 +25,7 @@ import { ProgramCanvas, SourceTile } from './stage';
 import { TEMPLATE_PAGES, TemplatePage } from './template-panels';
 import { useLiveCricket } from './live-cricket';
 import { MusicPlayer } from './music/player';
+import { useParty } from './party/use-party';
 import { Teleprompter } from './rundown/teleprompter';
 import { onAirIndex, takeItem, useRundown } from './rundown/use-rundown';
 import { useLiveControl } from './useLiveControl';
@@ -143,6 +144,13 @@ export function StudioRoom({ session, join, onExit }: Props) {
   const prevItem = useCallback(() => stepRundown(-1), [stepRundown]);
   const nextItem = useCallback(() => stepRundown(1), [stepRundown]);
 
+  // The watch party: its video player, queue and chat games. Only the host's party runs it.
+  const party = useParty({ room, scene: hostScene, update: updateScene, comments, enabled: isHost && studio.status === 'connected' && hostScene.template === 'watchparty' });
+  const stageNames = useMemo(
+    () => view.sources.filter((s) => s.kind === 'cam' && hostScene.stage.includes(s.id)).map((s) => s.label),
+    [view.sources, hostScene.stage],
+  );
+
   // The music makes room while someone on stage is talking. Nobody is heard on a holding screen.
   const someoneSpeaking = scene.screen === 'live' && view.sources.some((s) => s.speaking && scene.stage.includes(s.id));
   useEffect(() => music?.setSpeaking(someoneSpeaking), [music, someoneSpeaking]);
@@ -192,7 +200,9 @@ export function StudioRoom({ session, join, onExit }: Props) {
     for (const source of [myScreen, myClip]) {
       if (source && !autoStaged.current.has(source.id)) {
         autoStaged.current.add(source.id);
-        updateScene((s) => addToStage(s, source.id));
+        // In a watch party the video is the main picture, with the people below it.
+        const lead = source.kind === 'clip';
+        updateScene((s) => (lead && s.template === 'watchparty' ? promoteOnStage(addToStage(s, source.id), source.id) : addToStage(s, source.id)));
       }
     }
     for (const id of autoStaged.current) if (!sourceIds.has(id)) autoStaged.current.delete(id);
@@ -395,7 +405,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
                   <Icon name="image" />
                 </label>
                 {myClip ? (
-                  <IconButton icon="stop" label="Stop video clip" variant="filled" onClick={() => { stopClip.current?.(); stopClip.current = null; }} />
+                  <IconButton icon="stop" label="Stop video clip" variant="filled" onClick={() => { stopClip.current?.(); stopClip.current = null; party.stop(); }} />
                 ) : (
                   <label className="icon-file" title="Play a video clip">
                     <input type="file" accept="video/mp4,video/webm" onChange={(e) => { void shareClip(e.target.files?.[0]); e.target.value = ''; }} />
@@ -426,7 +436,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
           {isHost ? <Tabs<PanelId> tabs={hostTabs} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
           <div className="studio-panel">
             {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} onOpenPage={() => setPanel('template')} />}
-            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} liveScore={liveScore} rundown={rundown} />}
+            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} liveScore={liveScore} rundown={rundown} party={party} stageNames={stageNames} />}
             {panel === 'comments' && <CommentsPanel comments={comments} scene={scene} update={updateScene} />}
             {panel === 'banners' && <BannersPanel broadcastId={broadcastId} scene={scene} update={updateScene} music={music} ensureMusic={ensureMusic} handle={rundown.show?.x} />}
             {panel === 'brand' && <BrandPanel broadcastId={broadcastId} scene={scene} update={updateScene} />}

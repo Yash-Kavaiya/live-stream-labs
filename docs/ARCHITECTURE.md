@@ -99,6 +99,15 @@ and a segment the model leaves out is filled from the collected items. With seve
 each would run the schedule; the upsert by date makes that wasteful, not wrong. Move the timer to
 one replica or a cron job before scaling out.
 
+**The watch party is scene state plus two things only the host has.** `scene.party` holds the
+queue, what is playing, the poll, the scores, the hype level and the latest burst of reactions, and
+every change is a pure function in `packages/shared/src/party.ts`. Playback progress is stored as a
+start time and a length, so each client draws the progress line from its own clock and nothing is
+saved while a video plays. The host's browser alone has the video files (never uploaded; played
+through `PartyPlayer` as the existing clip source) and the list of who has voted. Chat is read for
+votes and emoji under strict rules, batched into one scene update every two seconds, and no chat
+text is drawn.
+
 **Music never touches the scene.** The host's `MusicPlayer` has its own audio context. Its output
 goes to the host's speakers and to a media stream track, which the program `AudioMixer` mixes like
 a microphone, on every screen including the holding screens. Built-in tracks are computed sample
@@ -111,13 +120,13 @@ Only the list of uploaded tracks is saved with the broadcast.
 |---|---|---|
 | Web | static files behind a CDN | none |
 | API | stateless; add replicas behind the proxy | Postgres |
-| Media worker | stateless; add replicas. One live broadcast ≈ one ffmpeg ≈ 1–2 CPU cores at 720p30 | CPU; autoscale on CPU or on `sessions` from `/healthz` |
+| Media worker | stateless; add replicas. One live broadcast ≈ one ffmpeg ≈ 2–4 CPU cores at 1080p30 | CPU; autoscale on CPU or on `sessions` from `/healthz` |
 | LiveKit | add nodes with Redis; one room lives on one node | bandwidth and CPU per room |
 | Egress (livekit mode) | add egress containers; each renders one broadcast in Chrome (≈ 2–4 cores) | CPU |
 | Postgres | managed instance, read replicas if dashboards get heavy | writes are tiny |
 | Recordings | local volume today (`DATA_DIR/recordings`) | see below |
 
-Rough capacity: a 16-core worker node carries about 8–12 simultaneous 720p broadcasts in relay
+Rough capacity: a 16-core worker node carries about 4–6 simultaneous 1080p broadcasts in relay
 mode. Ten guests in one room is well inside a single LiveKit node.
 
 ### What to change before real production load
@@ -152,6 +161,9 @@ mode. Ten guests in one room is well inside a single LiveKit node.
   test runs real ffmpeg.
 - `npm run e2e`: Playwright drives Chrome with a synthetic camera. A host and a guest go live to
   two local RTMP servers; `ffprobe` checks both receive H.264 + AAC and that the recording plays.
+- `e2e/party.spec.ts` runs a watch party with videos it makes with ffmpeg: queue, playback,
+  auto-advance, a poll, reactions and the scoreboard. Votes and emoji arriving from real chat are
+  covered by unit tests of the parsing rules, not end to end.
 - `e2e/rundown.spec.ts` and `e2e/music.spec.ts` run the rundown from the News tab and play music.
   The rundown test needs `NEWS_FIXTURE=1` (Playwright sets it when it starts the stack): the API
   then uses fixed news and calls no feed and no model.

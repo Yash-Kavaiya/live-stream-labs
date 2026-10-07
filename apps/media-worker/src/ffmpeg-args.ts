@@ -6,11 +6,15 @@ export interface EncodeSettings {
   audioKbps: number;
 }
 
+/**
+ * 1080p at 30 frames a second. 6000 kbit/s is the most Twitch accepts and is within what YouTube,
+ * Facebook, LinkedIn and X ask for at this size, so one encode serves every platform.
+ */
 export const DEFAULT_ENCODE: EncodeSettings = {
-  width: 1280,
-  height: 720,
+  width: 1920,
+  height: 1080,
   fps: 30,
-  videoKbps: 4000,
+  videoKbps: 6000,
   audioKbps: 160,
 };
 
@@ -66,9 +70,16 @@ export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = D
     '-tune', 'zerolatency',
     '-profile:v', 'high',
     '-pix_fmt', 'yuv420p',
+    // A constant bitrate. Left to itself the encoder sends almost nothing for a picture that does
+    // not move (a holding screen, a news graphic, someone listening): about 50 kbit/s where the
+    // platform was promised 6000. YouTube reports that as "not receiving enough video" and viewers
+    // see buffering. `nal-hrd=cbr` pads the stream so the rate never sags, which is what every
+    // platform's ingest guide asks for.
     '-b:v', `${videoKbps}k`,
+    '-minrate', `${videoKbps}k`,
     '-maxrate', `${videoKbps}k`,
-    '-bufsize', `${videoKbps * 2}k`,
+    '-bufsize', `${videoKbps}k`,
+    '-x264-params', 'nal-hrd=cbr:force-cfr=1',
     '-g', String(gop),
     '-keyint_min', String(gop),
     '-sc_threshold', '0',
@@ -89,6 +100,23 @@ export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = D
 export function parseFailedOutput(line: string): number | null {
   const match = /Slave muxer #(\d+) failed/.exec(line);
   return match ? Number(match[1]) : null;
+}
+
+export interface Progress {
+  frame: number;
+  /** Frames encoded per second, averaged since the start. */
+  fps: number;
+  /** Stream time over real time: 1 keeps up, less falls behind. Null until ffmpeg knows. */
+  speed: number | null;
+}
+
+/** `frame= 1234 fps= 30 ... speed=1.00x` → the numbers. Null for any other line. */
+export function parseProgress(line: string): Progress | null {
+  const frame = /frame=\s*(\d+)/.exec(line);
+  const fps = /fps=\s*([\d.]+)/.exec(line);
+  if (!frame || !fps) return null;
+  const speed = /speed=\s*([\d.]+)x/.exec(line);
+  return { frame: Number(frame[1]), fps: Number(fps[1]), speed: speed ? Number(speed[1]) : null };
 }
 
 /** True once ffmpeg prints its first progress line, i.e. frames are flowing out. */
