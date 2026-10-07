@@ -257,6 +257,8 @@ export const cricketSchema = z.object({
   projected: count.nullable().default(null),
   /** Live only: team colours, batting side first; null draws both in the brand colour. */
   colors: z.tuple([hexColor, hexColor]).nullable().default(null),
+  /** Play a moment over the frame when the score earns one: a boundary, a wicket, a milestone, a free hit. */
+  autoMoments: z.boolean().default(true),
 });
 export type Cricket = z.infer<typeof cricketSchema>;
 
@@ -288,6 +290,7 @@ export const DEFAULT_CRICKET: Cricket = {
   partnership: null,
   projected: null,
   colors: null,
+  autoMoments: true,
 };
 
 // ---------- Celebrations ----------
@@ -296,13 +299,21 @@ export const DEFAULT_CRICKET: Cricket = {
  * A one-shot animation over the whole frame. Every client plays it when it sees a new `id`;
  * `at` lets someone who joins later skip one that is already over.
  */
+/** The cricket moments. Each has its own cartoon; `custom` shows an emoji instead. */
+export const CRICKET_MOMENTS = ['four', 'six', 'wicket', 'fifty', 'hundred', 'freehit', 'custom'] as const;
+export type CricketMoment = (typeof CRICKET_MOMENTS)[number];
+
 export const celebrationSchema = z.object({
   id: z.string().max(40),
-  kind: z.enum(['winner', 'reaction']),
+  kind: z.enum(['winner', 'reaction', 'moment']),
   emoji: z.string().max(8),
-  /** Winner's name. Empty for a reaction. */
+  /** Winner's name, or a moment's headline when it is not the usual one. Empty for a reaction. */
   text: z.string().max(40),
   at: z.number(),
+  /** Moment only: which cartoon plays. */
+  moment: z.enum(CRICKET_MOMENTS).optional(),
+  /** Moment only: the line under the headline, e.g. "Kohli 52 (31)". */
+  detail: z.string().max(40).optional(),
 });
 export type Celebration = z.infer<typeof celebrationSchema>;
 

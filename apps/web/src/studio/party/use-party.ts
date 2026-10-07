@@ -48,6 +48,10 @@ export interface PartyControls {
   /** The queue item that last failed, and why. */
   error: { id: string; message: string } | null;
   volume: number;
+  /** The host's shared tab is on stage, which is how a link is shown. */
+  sharing: boolean;
+  /** Opens the browser's picker so the host can put the link's tab, with its sound, on stage. */
+  shareLink(): Promise<void>;
   addFiles(files: Iterable<File>): void;
   /** Gives a queued file item its file again, after a reload. */
   attachFile(id: string, file: File): void;
@@ -73,19 +77,23 @@ interface Options {
   update: SceneUpdater;
   /** Viewer comments while live. New ones are read for votes and emoji. */
   comments: CommentDto[];
+  /** The host is sharing a screen or tab right now. */
+  sharing: boolean;
   /** Only the host, in the watch party template, runs any of this. */
   enabled: boolean;
 }
 
 /**
- * The host's side of the watch party: the video files and their player, opening links, moving
+ * The host's side of the watch party: the video files and their player, links and their tab, moving
  * through the queue, and turning chat into poll votes and reactions. Everything viewers see goes
  * through `update` into `scene.party`.
  */
-export function useParty({ room, scene, update, comments, enabled }: Options): PartyControls {
+export function useParty({ room, scene, update, comments, sharing, enabled }: Options): PartyControls {
   const files = useRef(new Map<string, File>());
   const player = useRef<PartyPlayer | null>(null);
   const upNextTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** The tab a link was opened in, so stopping can close it again. */
+  const linkTab = useRef<Window | null>(null);
   const [ready, setReady] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<PartyControls['error']>(null);
   const [volume, setVolumeState] = useState(savedVolume);
@@ -99,21 +107,33 @@ export function useParty({ room, scene, update, comments, enabled }: Options): P
     return party === s.party ? s : { ...s, party };
   }), [update]);
 
+  /** Takes a link off the stage: ends the share that showed it and closes its tab. */
+  const dropLink = useCallback(() => {
+    const { scene: current, room: currentRoom } = live.current;
+    if (current.party.playing?.kind !== 'link') return;
+    void currentRoom?.localParticipant.setScreenShareEnabled(false).catch(() => undefined);
+    linkTab.current?.close();
+    linkTab.current = null;
+  }, []);
+
   const halt = useCallback(() => {
     clearTimeout(upNextTimer.current);
     player.current?.stop();
+    dropLink();
     setParty(stopPlaying);
-  }, [setParty]);
+  }, [dropLink, setParty]);
 
   const play = useCallback(
     (item: PartyItem) => {
       clearTimeout(upNextTimer.current);
       setError(null);
+      dropLink();
       if (item.kind === 'link') {
         player.current?.stop();
-        // Its own window, sized like the program, ready to pick in the screen share dialog.
-        const opened = window.open(item.url, 'studio-party', 'popup,width=1280,height=800');
-        if (!opened) setError({ id: item.id, message: 'The link could not be opened. Allow pop-ups for the studio and try again.' });
+        // A new tab, not a window. The browser only lets a page onto the stream through its
+        // share picker, so the host puts the tab on stage from the player as the next step.
+        linkTab.current = window.open(item.url, 'studio-party');
+        if (!linkTab.current) setError({ id: item.id, message: 'The link could not be opened. Allow pop-ups for the studio and try again.' });
         setParty((p) => startPlaying(p, item, 0, Date.now()));
         return;
       }
@@ -144,11 +164,22 @@ export function useParty({ room, scene, update, comments, enabled }: Options): P
         },
       );
     },
-    [halt, setParty],
+    [dropLink, halt, setParty],
   );
 
-  const controls = useMemo<Omit<PartyControls, 'ready' | 'error' | 'volume'>>(
+  const controls = useMemo<Omit<PartyControls, 'ready' | 'error' | 'volume' | 'sharing'>>(
     () => ({
+      async shareLink() {
+        const { scene: current, room: currentRoom } = live.current;
+        const playing = current.party.playing;
+        if (!currentRoom || playing?.kind !== 'link') return;
+        try {
+          await currentRoom.localParticipant.setScreenShareEnabled(true, { audio: true });
+        } catch (err) {
+          // Closing the browser's picker without choosing is not a failure.
+          if ((err as Error).name !== 'NotAllowedError') setError({ id: playing.itemId, message: 'The tab could not be put on stage. Try again.' });
+        }
+      },
       addFiles(picked) {
         const added: PartyItem[] = [];
         for (const file of picked) {
@@ -180,6 +211,7 @@ export function useParty({ room, scene, update, comments, enabled }: Options): P
         if (live.current.scene.party.playing?.itemId === id) {
           clearTimeout(upNextTimer.current);
           player.current?.stop();
+          dropLink();
         }
         files.current.delete(id);
         setReady(new Set(files.current.keys()));
@@ -233,7 +265,7 @@ export function useParty({ room, scene, update, comments, enabled }: Options): P
         setParty((p) => ({ ...p, hype: Math.min(100, p.hype + 8) }));
       },
     }),
-    [halt, play, setParty],
+    [dropLink, halt, play, setParty],
   );
 
   // ---------- Chat: votes and reactions ----------
@@ -290,8 +322,9 @@ export function useParty({ room, scene, update, comments, enabled }: Options): P
     wasEnabled.current = false;
     clearTimeout(upNextTimer.current);
     player.current?.stop();
+    dropLink();
     setParty(stopPlaying);
-  }, [enabled, setParty]);
+  }, [dropLink, enabled, setParty]);
   useEffect(
     () => () => {
       clearTimeout(upNextTimer.current);
@@ -300,5 +333,5 @@ export function useParty({ room, scene, update, comments, enabled }: Options): P
     [],
   );
 
-  return useMemo(() => ({ ...controls, ready, error, volume }), [controls, ready, error, volume]);
+  return useMemo(() => ({ ...controls, ready, error, volume, sharing }), [controls, ready, error, volume, sharing]);
 }

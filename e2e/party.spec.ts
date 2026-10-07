@@ -133,4 +133,21 @@ test('the host runs a watch party: queue, playback, poll, reactions and scoreboa
   await expect.poll(async () => (await saved()).playing?.title).toBe('First clip');
   await page.getByTestId('party-stop').click();
   await expect.poll(async () => (await saved()).playing).toBeNull();
+
+  // --- A link opens in a new tab, goes on stage as a shared tab, and Stop takes it off again ---
+  const [tab] = await Promise.all([page.waitForEvent('popup'), page.getByTestId('party-play').last().click()]);
+  expect(tab.url()).toContain('example.com/launch');
+  // A tab, not a window of its own: a pop-up window has no menu bar.
+  expect(await tab.evaluate(() => window.opener !== null && window.menubar.visible)).toBe(true);
+  await page.bringToFront();
+  await expect.poll(async () => (await saved()).playing?.title).toBe('Launch video');
+  await expect(page.getByTestId('party-link-state')).toContainText('Put it on stage');
+  await page.getByTestId('party-share').click();
+  await expect(page.getByTestId('source-screen')).toHaveAttribute('data-on-stage', 'true');
+  await expect(page.getByTestId('party-link-state')).toContainText('on stage with its sound');
+  await expect(page.getByTestId('party-share')).toHaveCount(0);
+  await page.getByTestId('party-stop').click();
+  await expect(page.getByTestId('source-screen')).toHaveCount(0);
+  await expect.poll(() => tab.isClosed()).toBe(true);
+  await expect.poll(async () => (await saved()).playing).toBeNull();
 });

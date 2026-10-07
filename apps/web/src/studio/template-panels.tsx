@@ -1,23 +1,27 @@
 import {
   BALLS,
+  CRICKET_MOMENTS,
   cricketStats,
   DEFAULT_CRICKET,
   inningsOver,
+  MOMENT_HEADLINES,
   NEWS_VIEWS,
   recordBall,
   CRICKET_VIEWS,
   type Ball,
   type Cricket,
+  type CricketMoment,
   type CricketView,
   type News,
   type NewsView,
   type Scene,
   type TemplateId,
 } from '@studio/shared';
-import { Button, Icon, Select, TextField } from '@studio/ui';
+import { Button, Icon, Select, Switch, TextField } from '@studio/ui';
 import { useEffect, useState } from 'react';
 import { fetchMatches, pickDefaultMatch, type MatchRef } from '../lib/cricket-feed';
 import { CleanControls } from './clean-controls';
+import { momentCelebration, withInnings } from './live-cricket';
 import { PartyPanel } from './party/party-panel';
 import type { PartyControls } from './party/use-party';
 import { RundownPanel } from './rundown/rundown-panel';
@@ -154,12 +158,69 @@ function LiveMatchPicker({ cricket, set, liveScore }: { cricket: Cricket; set(pa
   );
 }
 
+const MOMENT_BUTTONS: Record<Exclude<CricketMoment, 'custom'>, string> = { four: '4', six: '6', wicket: 'W', fifty: '50', hundred: '100', freehit: 'Free hit' };
+const BANNER_PRESETS = ['HAT-TRICK!', 'WHAT A CATCH!', 'DRS REVIEW', 'MAIDEN OVER'];
+const BANNER_EMOJI = ['📣', '🔥', '🏏', '🙌', '😱', '🎯'];
+
+/** Boundaries, wickets and milestones as cartoons over the frame, and a banner with the host's own words. */
+function CricketMoments({ scene, update }: Props) {
+  const [text, setText] = useState('');
+  const [emoji, setEmoji] = useState(BANNER_EMOJI[0]!);
+  const play = (moment: CricketMoment, detail = '', headline = '', picture = '') =>
+    update((s) => ({ ...s, celebration: momentCelebration(moment, detail, headline, picture) }));
+  const banner = (headline: string) => {
+    if (headline.trim()) play('custom', '', headline.trim(), emoji);
+  };
+
+  return (
+    <>
+      <h3 className="title-small">Moments</h3>
+      <div className="moment-pad" role="group" aria-label="Play a moment">
+        {CRICKET_MOMENTS.filter((moment) => moment !== 'custom').map((moment) => (
+          <button key={moment} type="button" className={`moment-button ${moment}`} title={MOMENT_HEADLINES[moment]} data-testid={`moment-${moment}`} onClick={() => play(moment)}>
+            {MOMENT_BUTTONS[moment]}
+          </button>
+        ))}
+      </div>
+      <Switch
+        label="Play moments automatically from the score"
+        selected={scene.cricket.autoMoments}
+        onChange={(autoMoments) => update((s) => ({ ...s, cricket: { ...s.cricket, autoMoments } }))}
+        data-testid="cricket-auto-moments"
+      />
+
+      <span className="body-medium">Your own banner</span>
+      <div className="timer-row" role="group" aria-label="Ready-made banners">
+        {BANNER_PRESETS.map((preset) => (
+          <button key={preset} type="button" className="timer-chip" data-testid="moment-preset" onClick={() => banner(preset)}>
+            {preset}
+          </button>
+        ))}
+      </div>
+      <div className="reaction-row six" role="group" aria-label="Picture on the banner">
+        {BANNER_EMOJI.map((choice) => (
+          <button key={choice} type="button" className="reaction-button" aria-label={`Use ${choice}`} aria-pressed={emoji === choice} onClick={() => setEmoji(choice)}>
+            {choice}
+          </button>
+        ))}
+      </div>
+      <TextField label="Banner text" value={text} onValue={setText} maxLength={40} placeholder="WHAT A SHOT!" onEnter={() => banner(text)} data-testid="moment-text" />
+      <div>
+        <Button variant="tonal" icon="campaign" disabled={!text.trim()} onClick={() => banner(text)} data-testid="moment-show">
+          Show banner
+        </Button>
+      </div>
+      <p className="body-small muted">A moment covers the middle of the frame for about four seconds, on every cricket layout.</p>
+    </>
+  );
+}
+
 function CricketControls({ scene, update, liveScore }: Props & { liveScore?: LiveScoreState }) {
   const c = scene.cricket;
   const live = c.source === 'live';
   const stats = cricketStats(c);
   const set = (patch: Partial<Cricket>) => update((s) => ({ ...s, cricket: { ...s.cricket, ...patch } }));
-  const score = (ball: Ball) => update((s) => ({ ...s, cricket: recordBall(s.cricket, ball) }));
+  const score = (ball: Ball) => update((s) => withInnings(s, recordBall(s.cricket, ball)));
   const setBatter = (index: 0 | 1, name: string) =>
     update((s) => {
       const batters: Cricket['batters'] = [{ ...s.cricket.batters[0] }, { ...s.cricket.batters[1] }];
@@ -178,6 +239,7 @@ function CricketControls({ scene, update, liveScore }: Props & { liveScore?: Liv
         view: s.cricket.view,
         title: s.cricket.title,
         oversLimit: s.cricket.oversLimit,
+        autoMoments: s.cricket.autoMoments,
         batting: s.cricket.bowling,
         bowling: s.cricket.batting,
         target: s.cricket.runs + 1,
@@ -267,7 +329,7 @@ function CricketControls({ scene, update, liveScore }: Props & { liveScore?: Liv
         <Button variant="outlined" icon="flag" onClick={startChase} data-testid="cricket-chase">
           Start the chase
         </Button>
-        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, source: 'manual', view: c.view })} data-testid="cricket-reset">
+        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, source: 'manual', view: c.view, autoMoments: c.autoMoments })} data-testid="cricket-reset">
           Reset
         </Button>
       </div>
@@ -277,6 +339,8 @@ function CricketControls({ scene, update, liveScore }: Props & { liveScore?: Liv
       </p>
         </>
       )}
+
+      <CricketMoments scene={scene} update={update} />
     </section>
   );
 }

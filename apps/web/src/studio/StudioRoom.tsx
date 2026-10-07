@@ -145,7 +145,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
   const nextItem = useCallback(() => stepRundown(1), [stepRundown]);
 
   // The watch party: its video player, queue and chat games. Only the host's party runs it.
-  const party = useParty({ room, scene: hostScene, update: updateScene, comments, enabled: isHost && studio.status === 'connected' && hostScene.template === 'watchparty' });
+  const party = useParty({ room, scene: hostScene, update: updateScene, comments, sharing: myScreen !== undefined, enabled: isHost && studio.status === 'connected' && hostScene.template === 'watchparty' });
   const stageNames = useMemo(
     () => view.sources.filter((s) => s.kind === 'cam' && hostScene.stage.includes(s.id)).map((s) => s.label),
     [view.sources, hostScene.stage],
