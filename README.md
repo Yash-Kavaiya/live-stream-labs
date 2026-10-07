@@ -28,6 +28,33 @@ npm run dev
 Install ffmpeg with `winget install Gyan.FFmpeg` (Windows), `brew install ffmpeg` (macOS) or
 `apt install ffmpeg` (Linux), then open a new terminal.
 
+### Windows (PowerShell)
+
+Start the whole stack, with the LiveKit server that runs on this computer (no LiveKit Cloud, no
+account). Keep the window open, then open <http://localhost:5173>:
+
+```powershell
+npm run dev
+```
+
+Stop it with Ctrl+C. If an earlier run is still holding its ports, stop it with:
+
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 5173,7880,1935,4000,4100 -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique |
+  ForEach-Object { taskkill /F /T /PID $_ }
+```
+
+To start without any LiveKit server:
+
+```powershell
+$env:NO_LOCAL_LIVEKIT = '1'; npm run dev
+```
+
+The dashboard then loads, but opening a studio fails with "Something went wrong": the studio
+needs a LiveKit room. Close that PowerShell window, or run `Remove-Item Env:NO_LOCAL_LIVEKIT`,
+before starting normally again.
+
 ### What `run.sh` does
 
 | Command | What it does |
