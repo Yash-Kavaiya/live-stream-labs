@@ -1,7 +1,7 @@
 import type { Celebration } from '@studio/shared';
 import { FONT, label, type Painter } from './painter';
 
-export const CELEBRATION_MS: Record<Celebration['kind'], number> = { winner: 6500, reaction: 3800 };
+export const CELEBRATION_MS: Record<Celebration['kind'], number> = { winner: 6500, reaction: 3800, moment: 3600 };
 
 const CONFETTI_COLORS = ['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#A142F4', '#FFFFFF'];
 const EMOJI_FONT = `'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', ${FONT}`;
@@ -50,7 +50,7 @@ export function drawEmoji(ctx: CanvasRenderingContext2D, glyph: string, x: numbe
 }
 
 /** Two cannons in the bottom corners fire paper that arcs up, tumbles and falls. */
-function drawConfetti({ ctx, size, unit }: Painter, t: number, fade: number): void {
+export function drawConfetti({ ctx, size, unit }: Painter, t: number, fade: number): void {
   const seconds = t / 1000;
   const gravity = size.height * 0.9;
   ctx.save();

@@ -322,6 +322,19 @@ md-slider { --md-slider-handle-width: 16px; --md-slider-handle-height: 16px; mar
 .ball-button:focus-visible, .reaction-button:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
 
 .reaction-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.reaction-row.six { grid-template-columns: repeat(6, 1fr); }
+.reaction-button[aria-pressed='true'] { border-color: transparent; background: var(--md-sys-color-secondary-container); }
+.moment-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.moment-button { height: 48px; border: 0; border-radius: var(--md-sys-shape-corner-medium); color: #ffffff; font: 700 1rem/1 var(--md-ref-typeface-brand); cursor: pointer; transition: transform 0.12s var(--app-motion-standard), box-shadow 0.12s var(--app-motion-standard); }
+.moment-button:hover { box-shadow: var(--app-elevation-1); transform: translateY(-1px); }
+.moment-button:active { transform: scale(0.94); }
+.moment-button:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.moment-button.four { background: #1a73e8; }
+.moment-button.six { background: #f9ab00; color: #1f1f1f; }
+.moment-button.wicket { background: #d93025; }
+.moment-button.fifty { background: #0d9488; }
+.moment-button.hundred { background: #7c3aed; }
+.moment-button.freehit { background: #c2410c; }
 .reaction-button { height: 52px; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium); background: transparent; font-size: 1.6rem; line-height: 1; cursor: pointer; transition: transform 0.15s var(--app-motion-standard), background 0.15s var(--app-motion-standard); }
 .reaction-button:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); transform: translateY(-2px) scale(1.08); }
 .reaction-button:active { transform: scale(0.9); }

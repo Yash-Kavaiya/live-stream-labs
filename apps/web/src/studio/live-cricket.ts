@@ -1,5 +1,5 @@
-import type { Cricket, Scene } from '@studio/shared';
-import { useEffect } from 'react';
+import { momentFor, type Celebration, type Cricket, type CricketMoment, type Scene } from '@studio/shared';
+import { useEffect, useRef } from 'react';
 import { fetchMatches, liveView, pickDefaultMatch, withLatestBall, type Ball, type InningsCard, type Scoreboard, type TeamScore } from '../lib/cricket-feed';
 import { useLiveMatch } from '../lib/use-live-match';
 
@@ -15,6 +15,17 @@ function ballsFromOvers(overs: string): number {
 }
 
 const scoreLine = (team: TeamScore) => `${team.abbr} ${team.runs}${team.allOut ? '' : `/${team.wickets}`} (${team.overs} ov)`;
+
+/** A cricket moment as a celebration, which every client plays once. */
+export function momentCelebration(moment: CricketMoment, detail = '', text = '', emoji = ''): Celebration {
+  return { id: crypto.randomUUID(), kind: 'moment', moment, emoji, text: text.slice(0, 40), detail: detail.slice(0, 40), at: Date.now() };
+}
+
+/** Puts the innings as it now stands into the scene, with the moment the change earned when moments are automatic. */
+export function withInnings(scene: Scene, next: Cricket, announce = true): Scene {
+  const cue = announce && next.autoMoments ? momentFor(scene.cricket, next) : null;
+  return { ...scene, cricket: next, ...(cue && { celebration: momentCelebration(cue.moment, cue.detail) }) };
+}
 
 /**
  * Turns what the score feed says into the innings the cricket template draws. The view and the
@@ -95,17 +106,22 @@ export function useLiveCricket(scene: Scene, update: SceneUpdater, enabled: bool
     return () => abort.abort();
   }, [wanted, liveMatch, update]);
   const data = useLiveMatch(following ? liveMatch.league : '', following ? liveMatch.event : '', view === 'card');
+  /** The match whose score is already in the scene. Its first copy is catching up, not news. */
+  const seeded = useRef('');
 
   useEffect(() => {
     const board = data.scoreboard;
     if (!following || !board) return;
+    const match = `${liveMatch.league}/${liveMatch.event}`;
+    const announce = seeded.current === match;
+    seeded.current = match;
     update((s) => {
       if (s.cricket.source !== 'live') return s;
       const next = liveToCricket(s.cricket, board, data.balls, data.cards);
       // Most refreshes bring nothing new; an unchanged scene is not saved or sent again.
-      return JSON.stringify(next) === JSON.stringify(s.cricket) ? s : { ...s, cricket: next };
+      return JSON.stringify(next) === JSON.stringify(s.cricket) ? s : withInnings(s, next, announce);
     });
-  }, [following, data.scoreboard, data.balls, data.cards, update]);
+  }, [following, liveMatch, data.scoreboard, data.balls, data.cards, update]);
 
   return following ? { updatedAt: data.updatedAt, error: data.error } : { updatedAt: null, error: null };
 }

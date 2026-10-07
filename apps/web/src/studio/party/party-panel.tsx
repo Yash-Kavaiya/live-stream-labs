@@ -68,7 +68,7 @@ function Queue({ scene, setParty, party }: { scene: Scene; setParty(change: (par
               Choose file
             </label>
           ) : (
-            <IconButton icon={item.kind === 'link' ? 'open_in_new' : 'play_arrow'} label={item.kind === 'link' ? 'Open to share' : 'Play'} variant={isPlaying ? 'standard' : 'tonal'} onClick={() => party.play(item)} data-testid="party-play" />
+            <IconButton icon={item.kind === 'link' ? 'open_in_new' : 'play_arrow'} label={item.kind === 'link' ? 'Open in a new tab' : 'Play'} variant={isPlaying ? 'standard' : 'tonal'} onClick={() => party.play(item)} data-testid="party-play" />
           )}
           <IconButton icon="arrow_upward" label="Move up" disabled={index === 0} onClick={() => setParty((p) => moveInQueue(p, item.id, -1))} />
           <IconButton icon="arrow_downward" label="Move down" disabled={index === queue.length - 1} onClick={() => setParty((p) => moveInQueue(p, item.id, 1))} />
@@ -82,7 +82,7 @@ function Queue({ scene, setParty, party }: { scene: Scene; setParty(change: (par
   return (
     <section className="col" data-testid="party-queue">
       <h3 className="title-small">Queue</h3>
-      {queue.length === 0 && <p className="body-medium muted">Line up what you will watch: video files from your computer, and links to share from their own window.</p>}
+      {queue.length === 0 && <p className="body-medium muted">Line up what you will watch: video files from your computer, and links to show from a browser tab.</p>}
       <div className="col" style={{ gap: 6 }}>{queue.map(row)}</div>
 
       <label className={`file-button timer-chip music-chip ${full ? 'disabled' : ''}`} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center' }}>
@@ -96,8 +96,8 @@ function Queue({ scene, setParty, party }: { scene: Scene; setParty(change: (par
         <IconButton icon="add" label="Add link" onClick={addLink} disabled={!url.trim() || full} data-testid="party-add-link" />
       </div>
       <p className="body-small muted">
-        Files play inside the studio and stay on your computer. A link opens in its own window: share
-        that window, with its sound, using the screen share button.
+        Files play inside the studio and stay on your computer. A link opens in a new tab: press
+        Put on stage, choose that tab and keep "Also share tab audio" ticked.
       </p>
     </section>
   );
@@ -139,7 +139,13 @@ function Player({ scene, setParty, party }: { scene: Scene; setParty(change: (pa
               data-testid="party-seek"
             />
           )}
-          {!isFile && <p className="body-small muted">This is a link. Control it in its own window; the studio only shows its title.</p>}
+          {!isFile && (
+            <p className="body-small muted" data-testid="party-link-state">
+              {party.sharing
+                ? 'The tab is on stage with its sound. Play and pause the video in that tab; Stop takes it off stage and closes the tab.'
+                : 'The link is open in a new tab. Put it on stage: choose that tab in the picker and keep "Also share tab audio" ticked.'}
+            </p>
+          )}
         </>
       )}
       <div className="row wrap" style={{ gap: 8 }}>
@@ -148,6 +154,11 @@ function Player({ scene, setParty, party }: { scene: Scene; setParty(change: (pa
             <IconButton icon={paused ? 'play_arrow' : 'pause'} label={paused ? 'Resume' : 'Pause'} variant="filled" onClick={party.togglePause} data-testid="party-pause" />
             <IconButton icon="replay" label="Start again from the beginning" variant="tonal" onClick={() => party.seek(0)} data-testid="party-restart" />
           </>
+        )}
+        {playing && !isFile && !party.sharing && (
+          <Button icon="present_to_all" onClick={() => void party.shareLink()} data-testid="party-share">
+            Put on stage
+          </Button>
         )}
         <Button variant="tonal" icon="skip_next" onClick={party.next} disabled={!next} data-testid="party-next">
           {playing ? 'Next' : 'Start'}

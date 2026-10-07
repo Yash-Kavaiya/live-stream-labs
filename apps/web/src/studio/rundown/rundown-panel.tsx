@@ -8,9 +8,9 @@ type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 
 const sameSource = (a: RundownSource | null, b: RundownSource) => a?.url === b.url;
 
-/** Opens a story's page in its own window, sized like the program, ready to pick in the screen share dialog. */
+/** Opens a story's page in a new tab, ready to pick in the screen share dialog. Every story reuses the same tab. */
 function openToShare(url: string): void {
-  window.open(url, 'studio-source', 'popup,width=1280,height=800');
+  window.open(url, 'studio-source');
 }
 
 function Sources({ item, extra, scene, update, onAdd }: { item: RundownItem; extra: RundownSource[]; scene: Scene; update: SceneUpdater; onAdd(url: string): string | null }) {

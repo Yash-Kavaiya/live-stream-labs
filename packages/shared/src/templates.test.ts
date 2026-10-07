@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cricketStats, oversText, recordBall, type Ball } from './cricket';
+import { cricketStats, momentFor, oversText, recordBall, type Ball } from './cricket';
 import { PROGRAM_SIZE, type Tile } from './layout';
 import { DEFAULT_AUTO, DEFAULT_CRICKET, DEFAULT_SCENE, NEWS_VIEWS, normalizeScene, type Cricket } from './scene';
 import { CRICKET_STRIP, computeSceneLayout, newsSafeArea, newsSidePanel } from './scene-layout';
@@ -159,6 +159,56 @@ describe('cricket scoring', () => {
 
     const lost = play({ ...DEFAULT_CRICKET, oversLimit: 1, target: 10 }, [1, 1, 1, 1, 1, 1]);
     expect(cricketStats(lost).summary).toBe('AUS won by 3 runs');
+  });
+});
+
+describe('cricket moments', () => {
+  /** The moment the last of these balls earns. */
+  const after = (start: Cricket, balls: Ball[]) => {
+    const before = play(start, balls.slice(0, -1));
+    return momentFor(before, recordBall(before, balls[balls.length - 1]!));
+  };
+  const on = (runs: number): Cricket => ({ ...DEFAULT_CRICKET, runs, batters: [{ name: 'Kohli', runs, balls: 30 }, DEFAULT_CRICKET.batters[1]] });
+
+  it('plays a boundary with the batter who hit it', () => {
+    expect(after(DEFAULT_CRICKET, [1, 4])).toEqual({ moment: 'four', detail: 'Batter 2 4 (1)' });
+    expect(after(DEFAULT_CRICKET, [6])).toEqual({ moment: 'six', detail: 'Batter 1 6 (1)' });
+  });
+
+  it('plays a wicket with the score it leaves', () => {
+    expect(after(DEFAULT_CRICKET, [4, 'W'])).toEqual({ moment: 'wicket', detail: 'IND 4/1' });
+  });
+
+  it('plays a free hit after a no-ball but not after a wide', () => {
+    expect(after(DEFAULT_CRICKET, ['nb'])?.moment).toBe('freehit');
+    expect(after(DEFAULT_CRICKET, ['wd'])).toBeNull();
+  });
+
+  it('plays a milestone once, as the batter crosses it', () => {
+    expect(after(on(48), [4])).toEqual({ moment: 'fifty', detail: 'Kohli 52 (31)' });
+    expect(after(on(52), [4])?.moment).toBe('four');
+    expect(after(on(94), [6])).toEqual({ moment: 'hundred', detail: 'Kohli 100 (31)' });
+    expect(after(on(49), [1])?.moment).toBe('fifty');
+  });
+
+  it('stays quiet for ordinary balls and when nothing changed', () => {
+    expect(after(DEFAULT_CRICKET, [1])).toBeNull();
+    expect(after(DEFAULT_CRICKET, [4, 0])).toBeNull();
+    const scored = play(DEFAULT_CRICKET, [4]);
+    expect(momentFor(scored, { ...scored, title: 'Final' })).toBeNull();
+  });
+
+  it('ignores a reset, a new innings and a jump of more than an over', () => {
+    const scored = play(DEFAULT_CRICKET, [6, 'W']);
+    expect(momentFor(scored, DEFAULT_CRICKET)).toBeNull();
+    expect(momentFor(DEFAULT_CRICKET, { ...scored, batting: 'AUS' })).toBeNull();
+    expect(momentFor(DEFAULT_CRICKET, { ...scored, balls: 40 })).toBeNull();
+  });
+
+  it('follows a batter by name when the live feed swaps their order', () => {
+    const before = on(47);
+    const swapped: Cricket = { ...before, runs: 51, balls: 1, batters: [before.batters[1], { name: 'Kohli', runs: 51, balls: 31 }], thisOver: ['4'] };
+    expect(momentFor(before, swapped)).toEqual({ moment: 'fifty', detail: 'Kohli 51 (31)' });
   });
 });
 

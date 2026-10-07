@@ -33,7 +33,7 @@ Install ffmpeg with `winget install Gyan.FFmpeg` (Windows), `brew install ffmpeg
 | Command | What it does |
 |---|---|
 | `./run.sh` | Install what is missing, then start the whole stack |
-| `./run.sh share` | The same, behind a public https address so guests anywhere can join |
+| `./run.sh guests` | For inviting guests: a public https address, with LiveKit Cloud carrying the media |
 | `./run.sh stop` | Stop a stack that is still holding its ports |
 | `./run.sh restart` | Stop, then start |
 | `./run.sh check` | Typecheck, lint and unit tests |
@@ -55,25 +55,33 @@ Every setting has a development default, so local use needs no `.env`. To change
 
 ## Invite guests from other networks
 
-`./run.sh share` starts the stack behind a tunnel and prints a public https address. Open the
+There are two ways to run the studio, and you choose per session:
+
+| Command | LiveKit | Use it for |
+|---|---|---|
+| `./run.sh` | On this computer | Streaming on your own, or with guests on your Wi-Fi. Uses no cloud allowance. |
+| `./run.sh guests` | LiveKit Cloud | Sessions with guests on other networks. |
+
+`./run.sh guests` starts the stack behind a tunnel and prints a public https address. Open the
 studio at that address, not at localhost, and send guests the invite link from there.
 
 It uses ngrok when ngrok is installed and signed in, otherwise a Cloudflare quick tunnel, which
-needs no account and is downloaded on first use. Force one with `TUNNEL=ngrok ./run.sh share` or
-`TUNNEL=cloudflare ./run.sh share`. A quick tunnel's address changes every time it starts.
+needs no account and is downloaded on first use. Force one with `TUNNEL=ngrok ./run.sh guests` or
+`TUNNEL=cloudflare ./run.sh guests`. A quick tunnel's address changes every time it starts.
 
 The tunnel carries the web app and the API only. Camera and microphone traffic goes straight
 between each browser and LiveKit, and a LiveKit running on your computer cannot be reached from
-outside your network. For guests elsewhere, create a LiveKit server on the internet (a free
-LiveKit Cloud project works) and set these in `.env`:
+outside your network. So a guest session uses a LiveKit server on the internet. Create a LiveKit
+Cloud project and put its details in `.env`:
 
 ```
-LIVEKIT_URL=wss://<your-project>.livekit.cloud
-LIVEKIT_API_KEY=<key>
-LIVEKIT_API_SECRET=<secret>
+GUEST_LIVEKIT_URL=wss://<your-project>.livekit.cloud
+GUEST_LIVEKIT_API_KEY=<key>
+GUEST_LIVEKIT_API_SECRET=<secret>
 ```
 
-Guests on the same Wi-Fi as you work without that.
+Only `./run.sh guests` reads these. Time spent in a guest session counts against the LiveKit
+project's allowance; a normal `./run.sh` does not touch it.
 
 ## Try a stream without a real platform
 
@@ -159,6 +167,13 @@ of the scene, so guests and the stream see what the host sees.
 **Score by hand** switches to a ball-by-ball pad (runs, wickets, wides, no-balls) for a match the
 feed does not cover.
 
+**Moments** play a cartoon banner across the middle of the frame for about four seconds: FOUR, SIX,
+WICKET, FIFTY, HUNDRED and FREE HIT. They play by themselves as the score changes, live or scored
+by hand (a no-ball brings up FREE HIT; a batter passing 50 or 100 brings up the milestone), and the
+buttons on the Cricket tab play any of them by hand. Turn **Play moments automatically** off to
+keep only the buttons. **Your own banner** shows any words you type, or a ready-made one such as
+HAT-TRICK!, with an emoji and in the brand colour.
+
 The live score comes from ESPN's public cricket feed. It is free and needs no key, but it is not a
 documented API and could change or be blocked without notice. When it cannot be reached, the last
 score stays on screen and the Cricket tab says so. Only the host's browser talks to the feed.
@@ -203,8 +218,8 @@ sign-off read them out.
 - The **teleprompter** appears under the stage with the words to say and background notes beside
   them. Only you see it: it is not part of the stream. Space starts and pauses the scroll, the
   left and right arrows change item, up and down nudge the text.
-- Each item lists its sources. **Open to share** opens the page in its own window; share that
-  window with the screen share button. **Show card** draws the site, title and a quote on the
+- Each item lists its sources. **Open to share** opens the page in a new tab; share that
+  tab with the screen share button. **Show card** draws the site, title and a quote on the
   stream beside you (Anchor scene, with only you on stage).
 - **Add a link** attaches a post or page of your own to the item on air.
 - **Full script** opens the whole show on one page, for reading ahead or printing.
@@ -216,11 +231,12 @@ Choose the **Watch party** template on the Scenes tab, then open the **Party** t
 - **Queue.** Add video files (MP4 or WebM) and links, and put them in order. Files play inside the
   studio as the main picture, with pause, seek, restart and volume. They are not uploaded: they
   stay on your computer, so after a page reload each file has to be chosen again. A link (YouTube,
-  X, any page) opens in its own window; share that window, with its sound, using the screen share
-  button, and control it there.
+  X, any page) opens in a new tab. Press **Put on stage**, choose that tab in the browser's picker
+  and keep "Also share tab audio" ticked: the tab goes on stage with its sound. Play and pause the
+  video in that tab; **Stop** takes it off stage and closes the tab.
 - **Now playing.** A bar along the top shows the title, the time played and what comes next. When
   a file ends, an "Up next" card counts down five seconds and the next file starts. Playback stops
-  at a link, because a window cannot be opened without a click.
+  at a link, because a tab cannot be opened without a click.
 - **Polls.** Ask a question with two to four answers. Viewers vote by typing the answer's number
   in chat, one vote each; you can add votes by hand. Closing the poll highlights the winner.
 - **Reactions.** Emoji that viewers send in chat float up over the video and fill the hype meter.

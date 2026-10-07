@@ -85,7 +85,8 @@ for (const theme of ['light', 'dark'] as const) {
     // The live feed may already have filled in a finished match: start a fresh innings.
     await page.getByTestId('cricket-reset').click();
     for (const ball of ['1', '4', '0', 'W', '6', 'wd', '2']) await page.getByTestId(`ball-${ball}`).click();
-    await page.waitForTimeout(1200);
+    // The six a moment ago is still playing its banner: let it clear the frame.
+    await page.waitForTimeout(4200);
     await program('cricket-match');
     await page.getByTestId('cricket-dashboard').click();
     await page.waitForTimeout(1200);

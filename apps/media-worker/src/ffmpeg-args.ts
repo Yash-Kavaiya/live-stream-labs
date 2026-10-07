@@ -54,7 +54,10 @@ export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = D
   return [
     '-hide_banner',
     '-loglevel', 'info',
-    '-fflags', '+genpts+nobuffer',
+    // Not `nobuffer`: it throws away what was read while working out the codecs, which is the
+    // first keyframe. The browser sends the next one over three seconds later, and until then
+    // there is nothing to decode, so the stream and the recording opened on a frozen picture.
+    '-fflags', '+genpts',
     // A live pipe: take the codec parameters from the container header instead of waiting for
     // megabytes of data. A quiet scene sends so little that default probing can take a minute.
     '-probesize', '64k',

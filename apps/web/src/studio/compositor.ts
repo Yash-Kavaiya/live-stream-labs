@@ -24,6 +24,7 @@ import {
 } from '@studio/shared';
 import { drawBadge, drawCta, drawHeadline, drawLowerThird, drawNameTitle, drawSocial, drawTicker, drawTitleCard } from './graphics/banners';
 import { CELEBRATION_MS, drawCelebration } from './graphics/celebration';
+import { drawMoment } from './graphics/cricket-moments';
 import { drawCricketBug, drawCricketCard, drawCricketDashboard, drawCricketSplit, drawCricketStrip } from './graphics/cricket';
 import { drawNews } from './graphics/news';
 import { PartyLayer } from './graphics/party';
@@ -517,7 +518,9 @@ export class Compositor {
       this.celebration = { id: next.id, startedAt: stale ? -Infinity : now };
     }
     const elapsed = now - this.celebration.startedAt;
-    if (elapsed < CELEBRATION_MS[next.kind]) drawCelebration(this.painter, next, elapsed);
+    if (elapsed >= CELEBRATION_MS[next.kind]) return;
+    if (next.kind === 'moment') drawMoment(this.painter, next, elapsed, scene.brand.color);
+    else drawCelebration(this.painter, next, elapsed);
   }
 
   // ---------- Overlays ----------

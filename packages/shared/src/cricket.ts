@@ -1,4 +1,4 @@
-import type { Cricket } from './scene';
+import type { Cricket, CricketMoment } from './scene';
 
 /** What can happen on one delivery, as the scorer enters it. */
 export type Ball = 0 | 1 | 2 | 3 | 4 | 6 | 'W' | 'wd' | 'nb';
@@ -103,4 +103,58 @@ export function cricketStats(c: Cricket): CricketStats {
     summary,
     bowlerFigures: `${c.bowler.wickets}-${c.bowler.runs} (${oversText(c.bowler.balls)})`,
   };
+}
+
+export interface MomentCue {
+  moment: Exclude<CricketMoment, 'custom'>;
+  /** The line under the headline: who did it and where that leaves them. */
+  detail: string;
+}
+
+/** What each moment says on screen unless the host types something else. */
+export const MOMENT_HEADLINES: Record<CricketMoment, string> = {
+  four: 'FOUR!',
+  six: 'SIX!',
+  wicket: 'WICKET!',
+  fifty: 'FIFTY!',
+  hundred: 'HUNDRED!',
+  freehit: 'FREE HIT',
+  custom: '',
+};
+
+const batterText = (b: { name: string; runs: number; balls: number }) => `${b.name} ${b.runs} (${b.balls})`.slice(0, 40);
+
+/**
+ * The moment a change to the innings earns, or null. Works the same for a ball the host taps and
+ * for a refresh of the live feed, by comparing the innings before and after.
+ *
+ * Only a step forward of at most one over in the same innings counts, so a reset, a new innings or
+ * a different match never sets one off. When one ball earns several, the rarest wins: a wicket,
+ * then a hundred, a fifty, a six, a four, a free hit.
+ */
+export function momentFor(before: Cricket, after: Cricket): MomentCue | null {
+  const bowled = after.balls - before.balls;
+  if (after.batting !== before.batting || bowled < 0 || bowled > BALLS_PER_OVER) return null;
+  if (after.runs < before.runs || after.wickets < before.wickets) return null;
+
+  if (after.wickets > before.wickets) return { moment: 'wicket', detail: `${after.batting} ${after.runs}/${after.wickets}`.slice(0, 40) };
+
+  // The live feed lists the batter on strike first, so the same batter is found by name.
+  const was = (name: string) => before.batters.find((b) => b.name === name);
+  for (const [moment, mark] of [['hundred', 100], ['fifty', 50]] as const) {
+    const batter = after.batters.find((b) => b.runs >= mark && (was(b.name)?.runs ?? mark) < mark);
+    if (batter) return { moment, detail: batterText(batter) };
+  }
+
+  // The rest belong to the latest delivery, so they need exactly one new ball on the board.
+  const newBall = bowled === 1 || (bowled === 0 && after.thisOver.join() !== before.thisOver.join());
+  const last = after.thisOver[after.thisOver.length - 1];
+  if (!newBall || last === undefined) return null;
+  if (last === '4' || last === '6') {
+    const hit = Number(last);
+    const batter = after.batters.find((b) => b.runs - (was(b.name)?.runs ?? b.runs) === hit);
+    return { moment: hit === 6 ? 'six' : 'four', detail: batter ? batterText(batter) : '' };
+  }
+  if (/nb/i.test(last)) return { moment: 'freehit', detail: 'No-ball · the next ball is free' };
+  return null;
 }
