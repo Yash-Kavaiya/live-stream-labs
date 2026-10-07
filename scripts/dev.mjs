@@ -46,9 +46,10 @@ function shutdown(code = 0) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-const livekit = await ensureLiveKit();
+const livekit = process.env.NO_LOCAL_LIVEKIT ? '' : await ensureLiveKit();
 const watch = process.env.NO_WATCH ? [] : ['watch'];
-run('livekit', `"${livekit}"`, ['--dev', '--bind', '127.0.0.1']);
+// `./run.sh guests` points the stack at a LiveKit server on the internet instead.
+if (!process.env.NO_LOCAL_LIVEKIT) run('livekit', `"${livekit}"`, ['--dev', '--bind', '127.0.0.1']);
 run('rtmp', 'node', ['scripts/mock-rtmp.mjs']);
 run('api', 'npx', ['tsx', ...watch, 'src/index.ts'], path.join(root, 'apps/api'));
 run('worker', 'npx', ['tsx', ...watch, 'src/index.ts'], path.join(root, 'apps/media-worker'));

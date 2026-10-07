@@ -7,9 +7,10 @@
 //
 // The tunnel carries the web app and the API. It does not carry camera and microphone traffic:
 // that goes straight between each browser and LiveKit, and a LiveKit running on this computer
-// cannot be reached from outside your network. For guests on other networks, point LIVEKIT_URL,
-// LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env at a LiveKit server on the internet (a free
-// LiveKit Cloud project works).
+// cannot be reached from outside your network. So this run uses the LiveKit server named by
+// GUEST_LIVEKIT_URL, GUEST_LIVEKIT_API_KEY and GUEST_LIVEKIT_API_SECRET in .env (a LiveKit Cloud
+// project). Only this command reads them: a normal `./run.sh` stays on the local LiveKit and
+// spends none of the cloud allowance.
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -95,12 +96,20 @@ function openTunnel(tunnel) {
   });
 }
 
-/** LIVEKIT_URL as the apps will see it: the environment first, then the repo's .env. */
-function livekitUrl() {
-  if (process.env.LIVEKIT_URL) return process.env.LIVEKIT_URL;
+/** A setting from the environment, else from the repo's .env. */
+function setting(name) {
+  if (process.env[name]) return process.env[name];
   const file = path.join(root, '.env');
-  const line = existsSync(file) ? readFileSync(file, 'utf8').split(/\r?\n/).find((l) => l.startsWith('LIVEKIT_URL=')) : undefined;
-  return line?.slice('LIVEKIT_URL='.length).trim() || 'ws://localhost:7880';
+  const line = existsSync(file) ? readFileSync(file, 'utf8').split(/\r?\n/).find((l) => l.startsWith(`${name}=`)) : undefined;
+  return line?.slice(name.length + 1).trim() || '';
+}
+
+/** The internet LiveKit server for a guest session, when all three settings are present. */
+function guestLiveKit() {
+  const url = setting('GUEST_LIVEKIT_URL');
+  const apiKey = setting('GUEST_LIVEKIT_API_KEY');
+  const apiSecret = setting('GUEST_LIVEKIT_API_SECRET');
+  return url && apiKey && apiSecret ? { url, apiKey, apiSecret } : null;
 }
 
 const tunnel = chooseTunnel();
@@ -113,13 +122,16 @@ try {
   stop(1);
 }
 
-const local = /\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(livekitUrl());
+const cloud = guestLiveKit();
 console.log(`\n  Public address: ${url}`);
 console.log('  Open the studio at that address (not localhost) and send guests the invite link from it.');
-if (local) {
+if (cloud) {
+  console.log(`\n  Cameras and sound go through ${new URL(cloud.url).host} for this run.`);
+  console.log('  Time in the studio counts against that LiveKit project. Stop with Ctrl+C when done.');
+} else {
   console.log('\n  LiveKit is running on this computer, so guests outside your network will reach the');
-  console.log('  page but get no camera or sound. Set LIVEKIT_URL, LIVEKIT_API_KEY and');
-  console.log('  LIVEKIT_API_SECRET in .env to a LiveKit server on the internet to fix that.');
+  console.log('  page but get no camera or sound. Set GUEST_LIVEKIT_URL, GUEST_LIVEKIT_API_KEY and');
+  console.log('  GUEST_LIVEKIT_API_SECRET in .env to a LiveKit server on the internet to fix that.');
 }
 console.log('');
 
@@ -128,7 +140,12 @@ console.log('');
 const stack = spawn('node', ['scripts/dev.mjs'], {
   cwd: root,
   stdio: 'inherit',
-  env: { ...process.env, WEB_ORIGIN: url, TUNNEL_HOST: new URL(url).host },
+  env: {
+    ...process.env,
+    WEB_ORIGIN: url,
+    TUNNEL_HOST: new URL(url).host,
+    ...(cloud ? { LIVEKIT_URL: cloud.url, LIVEKIT_API_KEY: cloud.apiKey, LIVEKIT_API_SECRET: cloud.apiSecret, NO_LOCAL_LIVEKIT: '1' } : {}),
+  },
 });
 children.push(stack);
 stack.on('exit', (code) => stop(code ?? 1));
