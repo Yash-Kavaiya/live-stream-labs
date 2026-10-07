@@ -24,6 +24,10 @@ import { LayoutPicker } from './LayoutThumb';
 import { ProgramCanvas, SourceTile } from './stage';
 import { TEMPLATE_PAGES, TemplatePage } from './template-panels';
 import { useLiveCricket } from './live-cricket';
+import { MusicPlayer } from './music/player';
+import { useParty } from './party/use-party';
+import { Teleprompter } from './rundown/teleprompter';
+import { onAirIndex, takeItem, useRundown } from './rundown/use-rundown';
 import { useLiveControl } from './useLiveControl';
 import { useDrawableSources, useStudioRoom, type JoinOptions } from './useStudioRoom';
 
@@ -69,12 +73,26 @@ export function StudioRoom({ session, join, onExit }: Props) {
     () => (isHost ? api.broadcast(broadcastId) : Promise.resolve(undefined)),
     [broadcastId, isHost],
   );
+  // Music is created on the host's first click on a track: a browser will not start audio sooner.
+  const [music, setMusic] = useState<MusicPlayer | null>(null);
+  const musicRef = useRef<MusicPlayer | null>(null);
+  const ensureMusic = useCallback(() => {
+    if (!musicRef.current) {
+      musicRef.current = new MusicPlayer();
+      setMusic(musicRef.current);
+    }
+    return musicRef.current;
+  }, []);
+  useEffect(() => () => musicRef.current?.close(), []);
+  const musicTrack = useMemo(() => music?.track ?? null, [music]);
+
   const live = useLiveControl({
     broadcastId,
     canvas: canvasRef,
     scene,
     sources: view.sources,
     egress: studio.egress,
+    music: musicTrack,
     initiallyLive: session.broadcast.status === 'live' && config?.egressMode === 'livekit',
     onChanged: broadcast.reload,
   });
@@ -112,6 +130,30 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
   useAutoDirector(hostScene, updateScene, view.sources, isHost && studio.status === 'connected');
   const liveScore = useLiveCricket(hostScene, updateScene, isHost);
+
+  // The day's rundown, for the News page and the teleprompter. Only the host's news room asks for it.
+  const rundown = useRundown(isHost && hostScene.template === 'newsroom');
+  const rundownIndex = onAirIndex(rundown.rundown, hostScene);
+  const prompterItem = isHost && hostScene.template === 'newsroom' ? (rundown.rundown?.items[rundownIndex] ?? null) : null;
+  const rundownRef = useRef({ rundown, rundownIndex });
+  rundownRef.current = { rundown, rundownIndex };
+  const stepRundown = useCallback(
+    (by: number) => takeItem(updateScene, rundownRef.current.rundown, rundownRef.current.rundownIndex + by),
+    [updateScene],
+  );
+  const prevItem = useCallback(() => stepRundown(-1), [stepRundown]);
+  const nextItem = useCallback(() => stepRundown(1), [stepRundown]);
+
+  // The watch party: its video player, queue and chat games. Only the host's party runs it.
+  const party = useParty({ room, scene: hostScene, update: updateScene, comments, enabled: isHost && studio.status === 'connected' && hostScene.template === 'watchparty' });
+  const stageNames = useMemo(
+    () => view.sources.filter((s) => s.kind === 'cam' && hostScene.stage.includes(s.id)).map((s) => s.label),
+    [view.sources, hostScene.stage],
+  );
+
+  // The music makes room while someone on stage is talking. Nobody is heard on a holding screen.
+  const someoneSpeaking = scene.screen === 'live' && view.sources.some((s) => s.speaking && scene.stage.includes(s.id));
+  useEffect(() => music?.setSpeaking(someoneSpeaking), [music, someoneSpeaking]);
 
   // Take sources off the stage once they are gone (guest left, screen share stopped). The delay
   // rides out the moment after connecting when remote tracks are not listed yet.
@@ -158,7 +200,9 @@ export function StudioRoom({ session, join, onExit }: Props) {
     for (const source of [myScreen, myClip]) {
       if (source && !autoStaged.current.has(source.id)) {
         autoStaged.current.add(source.id);
-        updateScene((s) => addToStage(s, source.id));
+        // In a watch party the video is the main picture, with the people below it.
+        const lead = source.kind === 'clip';
+        updateScene((s) => (lead && s.template === 'watchparty' ? promoteOnStage(addToStage(s, source.id), source.id) : addToStage(s, source.id)));
       }
     }
     for (const id of autoStaged.current) if (!sourceIds.has(id)) autoStaged.current.delete(id);
@@ -278,6 +322,17 @@ export function StudioRoom({ session, join, onExit }: Props) {
             )}
           </div>
 
+          {prompterItem && rundown.rundown && (
+            <Teleprompter
+              item={prompterItem}
+              position={`${rundownIndex + 1} of ${rundown.rundown.items.length}`}
+              hasPrev={rundownIndex > 0}
+              hasNext={rundownIndex < rundown.rundown.items.length - 1}
+              onPrev={prevItem}
+              onNext={nextItem}
+            />
+          )}
+
           {isHost && (
             <div className="row wrap" style={{ justifyContent: 'space-between' }}>
               {templateOwnsLayout ? (
@@ -350,7 +405,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
                   <Icon name="image" />
                 </label>
                 {myClip ? (
-                  <IconButton icon="stop" label="Stop video clip" variant="filled" onClick={() => { stopClip.current?.(); stopClip.current = null; }} />
+                  <IconButton icon="stop" label="Stop video clip" variant="filled" onClick={() => { stopClip.current?.(); stopClip.current = null; party.stop(); }} />
                 ) : (
                   <label className="icon-file" title="Play a video clip">
                     <input type="file" accept="video/mp4,video/webm" onChange={(e) => { void shareClip(e.target.files?.[0]); e.target.value = ''; }} />
@@ -381,9 +436,9 @@ export function StudioRoom({ session, join, onExit }: Props) {
           {isHost ? <Tabs<PanelId> tabs={hostTabs} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
           <div className="studio-panel">
             {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} onOpenPage={() => setPanel('template')} />}
-            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} liveScore={liveScore} />}
+            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} liveScore={liveScore} rundown={rundown} party={party} stageNames={stageNames} />}
             {panel === 'comments' && <CommentsPanel comments={comments} scene={scene} update={updateScene} />}
-            {panel === 'banners' && <BannersPanel scene={scene} update={updateScene} />}
+            {panel === 'banners' && <BannersPanel broadcastId={broadcastId} scene={scene} update={updateScene} music={music} ensureMusic={ensureMusic} handle={rundown.show?.x} />}
             {panel === 'brand' && <BrandPanel broadcastId={broadcastId} scene={scene} update={updateScene} />}
             {panel === 'chat' && <ChatPanel chat={studio.chat} onSend={studio.sendChat} />}
           </div>

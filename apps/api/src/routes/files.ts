@@ -15,7 +15,18 @@ const IMAGE_TYPES: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
 };
-const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+/** Music the host uploads to play under the show. */
+const AUDIO_TYPES: Record<string, string> = {
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+};
+const ASSET_TYPES = { ...IMAGE_TYPES, ...AUDIO_TYPES };
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const SAFE_NAME = /^[A-Za-z0-9_-]+\.[a-z0-9]+$/;
 
 /** Streams a file with HTTP Range support so browsers can seek in recordings. */
@@ -44,18 +55,22 @@ export function fileRoutes(app: FastifyInstance, deps: Deps): void {
   const recordingsDir = path.join(config.dataDir, 'recordings');
 
   app.addContentTypeParser(
-    Object.keys(IMAGE_TYPES),
-    { parseAs: 'buffer', bodyLimit: MAX_ASSET_BYTES },
+    Object.keys(ASSET_TYPES),
+    { parseAs: 'buffer', bodyLimit: MAX_AUDIO_BYTES },
     (_req, body, done) => done(null, body),
   );
 
-  // --- Brand assets and shared images. Raster formats only: SVG could carry script. ---
+  // --- Brand assets, shared images and music. Raster images only: SVG could carry script. ---
 
   app.post('/api/broadcasts/:id/assets', async (req) => {
     const userId = await requireUserId(deps, req);
     await getOwnedBroadcast(deps, userId, (req.params as { id: string }).id);
-    const ext = IMAGE_TYPES[(req.headers['content-type'] ?? '').split(';')[0]!];
-    if (!ext || !Buffer.isBuffer(req.body)) throw badRequest('Upload a PNG, JPEG, WebP or GIF image');
+    const type = (req.headers['content-type'] ?? '').split(';')[0]!;
+    const ext = ASSET_TYPES[type];
+    if (!ext || !Buffer.isBuffer(req.body)) {
+      throw badRequest('Upload a PNG, JPEG, WebP or GIF image, or an MP3, WAV, OGG or M4A track');
+    }
+    if (type in IMAGE_TYPES && req.body.length > MAX_IMAGE_BYTES) throw badRequest('Images can be up to 5 MB');
 
     const name = `${newId()}.${ext}`;
     await mkdir(assetsDir, { recursive: true });
@@ -66,7 +81,7 @@ export function fileRoutes(app: FastifyInstance, deps: Deps): void {
   app.get('/assets/:name', async (req, reply) => {
     const { name } = req.params as { name: string };
     const ext = name.split('.').pop() ?? '';
-    const type = Object.entries(IMAGE_TYPES).find(([, e]) => e === ext)?.[0];
+    const type = Object.entries(ASSET_TYPES).find(([, e]) => e === ext)?.[0];
     if (!SAFE_NAME.test(name) || !type) throw notFound('Asset');
     reply.header('cache-control', 'public, max-age=31536000, immutable');
     return sendFile(req, reply, path.join(assetsDir, name), type);

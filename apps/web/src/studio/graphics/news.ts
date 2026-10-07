@@ -1,5 +1,5 @@
 import { newsSafeArea, newsSidePanel, type Scene } from '@studio/shared';
-import { drawPill, fillRound, FONT, label, readableOn, wrapText, type Painter } from './painter';
+import { drawPill, ellipsize, fillRound, FONT, label, readableOn, wrapText, type Painter } from './painter';
 
 const TICKER_HEIGHT = 7.6;
 const SUBHEAD_HEIGHT = 6;
@@ -109,7 +109,9 @@ function drawStoryPanel(p: Painter, scene: Scene): void {
 
   fillRound(ctx, rect.x, rect.y, rect.width, rect.height, unit * 1.4, 'rgb(255 255 255 / 0.07)');
   fillRound(ctx, rect.x, rect.y, rect.width, unit * 1, [unit * 1.4, unit * 1.4, 0, 0], accent);
-  label(ctx, points.length ? 'TOP STORY' : scene.news.channel.toUpperCase(), rect.x + pad, rect.y + unit * 5.4, {
+  // The panel is headed by the story's own tag, so a repo of the day or a sign-off is not called the top story.
+  const heading = points.length ? scene.news.tag.trim().toUpperCase() || 'TOP STORY' : scene.news.channel.toUpperCase();
+  label(ctx, heading, rect.x + pad, rect.y + unit * 5.4, {
     size: unit * 2.4,
     weight: 700,
     color: 'rgb(255 255 255 / 0.65)',
@@ -132,6 +134,52 @@ function drawStoryPanel(p: Painter, scene: Scene): void {
     y += lines.length * unit * 4 + unit * 2.6;
     if (y > rect.y + rect.height - unit * 6) break;
   }
+}
+
+/** Anchor shot with a source card up: where the story came from, and the line worth reading. */
+function drawSourceCard(p: Painter, scene: Scene): void {
+  const source = scene.news.source;
+  if (!source) return;
+  const { ctx, unit } = p;
+  const rect = newsSidePanel(p.size);
+  const accent = scene.brand.color;
+  const pad = unit * 2.6;
+  const inner = rect.width - pad * 2;
+  const bottom = rect.y + rect.height - pad;
+
+  fillRound(ctx, rect.x, rect.y, rect.width, rect.height, unit * 1.4, 'rgb(255 255 255 / 0.96)');
+  fillRound(ctx, rect.x, rect.y, rect.width, unit * 1, [unit * 1.4, unit * 1.4, 0, 0], accent);
+
+  ctx.font = `700 ${unit * 2.2}px ${FONT}`;
+  const site = ellipsize(ctx, source.site.toUpperCase(), inner - unit * 4);
+  drawPill(p, rect.x + pad, rect.y + unit * 3.4, site, accent, readableOn(accent));
+
+  let y = rect.y + unit * 11.5;
+  ctx.font = `700 ${unit * 3.2}px ${FONT}`;
+  for (const line of wrapText(ctx, source.title, inner, 3)) {
+    label(ctx, line, rect.x + pad, y, { size: unit * 3.2, weight: 700, color: '#111318' });
+    y += unit * 4.1;
+  }
+
+  // The address sits on the bottom edge; the quote gets whatever room is left above it.
+  const address = source.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+  label(ctx, address, rect.x + pad, bottom - unit * 1.2, { size: unit * 2, color: '#5f6368', maxWidth: inner });
+  ctx.fillStyle = 'rgb(17 19 24 / 0.12)';
+  ctx.fillRect(rect.x + pad, bottom - unit * 4, inner, unit * 0.15);
+
+  const quote = source.quote.trim();
+  if (!quote) return;
+  y += unit * 2.4;
+  const lineHeight = unit * 4.8;
+  const room = Math.floor((bottom - unit * 5.5 - y) / lineHeight);
+  if (room < 1) return;
+  ctx.fillStyle = accent;
+  ctx.font = `400 ${unit * 3.5}px ${FONT}`;
+  const lines = wrapText(ctx, `“${quote}”`, inner - unit * 2, room);
+  ctx.fillRect(rect.x + pad, y - lineHeight / 2, unit * 0.5, lines.length * lineHeight);
+  lines.forEach((line, i) => {
+    label(ctx, line, rect.x + pad + unit * 2, y + i * lineHeight, { size: unit * 3.5, weight: 400, color: '#111318' });
+  });
 }
 
 /** Headline shot: the story fills the frame; the presenter is a small tile in the corner. */
@@ -179,6 +227,10 @@ export function drawNews(p: Painter, scene: Scene, frame: NewsFrame): void {
     drawLowerThird(p, scene, { ...frame, headline: null });
     return;
   }
-  if (scene.news.view === 'anchor' && !frame.sideOccupied) drawStoryPanel(p, scene);
+  if (scene.news.view === 'anchor' && !frame.sideOccupied) {
+    // A source card takes the story panel's place while it is up.
+    if (scene.news.source) drawSourceCard(p, scene);
+    else drawStoryPanel(p, scene);
+  }
   drawLowerThird(p, scene, frame);
 }

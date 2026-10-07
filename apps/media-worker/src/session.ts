@@ -2,11 +2,15 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { redactRtmpTarget, type EgressJob, type EgressStatus, type TargetStatus } from '@studio/shared';
-import { buildFfmpegArgs, isProgressLine, parseFailedOutput, type TeeOutput } from './ffmpeg-args';
+import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, parseFailedOutput, parseProgress, type TeeOutput } from './ffmpeg-args';
 
 /** If ffmpeg cannot keep up, stop rather than buffer without bound. */
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 const KILL_AFTER_MS = 10_000;
+/** How often the encoder's health goes to the log, and how soon a warning may repeat. */
+const HEALTH_EVERY_MS = 30_000;
+/** Below this share of real time the stream is falling behind and viewers will buffer. */
+const SLOW_SPEED = 0.95;
 
 export interface SessionOptions {
   job: EgressJob;
@@ -28,6 +32,7 @@ export class EgressSession {
   private stopping = false;
   private lastError: string | null = null;
   private killTimer: NodeJS.Timeout | undefined;
+  private lastHealthAt = Date.now();
   /** Last few non-progress log lines, printed when ffmpeg exits abnormally. */
   private readonly logTail: string[] = [];
   readonly done: Promise<void>;
@@ -94,6 +99,7 @@ export class EgressSession {
   }
 
   private onLogLine(line: string): void {
+    this.reportHealth(line);
     // FFMPEG_LOG=1 prints ffmpeg's full log, for diagnosing a stream that will not start.
     if (process.env.FFMPEG_LOG) this.opts.log(`ffmpeg: ${line.trim()}`);
     if (line.trim() && !isProgressLine(line)) {
@@ -123,6 +129,24 @@ export class EgressSession {
     if (/\b(error|invalid|failed)\b/i.test(line) && !isProgressLine(line)) {
       this.lastError = line.trim().slice(0, 300);
     }
+  }
+
+  /**
+   * Logs how the encoder is doing twice a minute. Platforms complain about a stream that arrives
+   * slower than real time; this line says whether that started here or further along.
+   */
+  private reportHealth(line: string): void {
+    const progress = parseProgress(line);
+    const now = Date.now();
+    if (!progress || now - this.lastHealthAt < HEALTH_EVERY_MS) return;
+    this.lastHealthAt = now;
+    const speed = progress.speed === null ? 'unknown' : `${progress.speed.toFixed(2)}x`;
+    const behind = progress.speed !== null && progress.speed < SLOW_SPEED;
+    this.opts.log(
+      behind
+        ? `encoder is behind: ${progress.fps} of ${DEFAULT_ENCODE.fps} frames a second, speed ${speed}. This computer or the incoming picture cannot keep up; viewers will see buffering.`
+        : `encoder health: ${progress.fps} frames a second, speed ${speed}`,
+    );
   }
 
   private finish(exitCode: number): void {

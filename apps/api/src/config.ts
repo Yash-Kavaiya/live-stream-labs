@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { DEFAULT_SHOW, type Show } from './news/show';
 
 const DEV_SECRET = 'dev-only-secret-change-me-in-production!';
 
@@ -34,6 +35,19 @@ const envSchema = z.object({
   TWITCH_CLIENT_SECRET: optional,
   FACEBOOK_APP_ID: optional,
   FACEBOOK_APP_SECRET: optional,
+
+  NVIDIA_API_KEY: optional,
+  NEWS_MODEL: z.string().default('nvidia/nemotron-3-ultra-550b-a55b'),
+  NEWS_FALLBACK_MODEL: z.string().default('nvidia/nemotron-3-super-120b-a12b'),
+  GEMINI_API_KEY: optional,
+  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
+  SHOW_NAME: optional,
+  SHOW_HOST: optional,
+  SHOW_X: optional,
+  SHOW_GITHUB: optional,
+  SHOW_LINKEDIN: optional,
+  /** Tests only: build the rundown from fixed items, with no network and no model. */
+  NEWS_FIXTURE: optional,
 });
 
 export interface OAuthApp {
@@ -54,6 +68,18 @@ export interface Config {
   livekit: { url: string; apiKey: string; apiSecret: string };
   egressMode: 'relay' | 'livekit';
   oauth: { google?: OAuthApp; twitch?: OAuthApp; facebook?: OAuthApp };
+  news: NewsConfig;
+}
+
+/** The daily rundown: which models may write it, and whose show it is. */
+export interface NewsConfig {
+  nvidiaKey: string | undefined;
+  model: string;
+  fallbackModel: string;
+  geminiKey: string | undefined;
+  geminiModel: string;
+  show: Show;
+  fixture: boolean;
 }
 
 function oauthApp(clientId?: string, clientSecret?: string): OAuthApp | undefined {
@@ -99,6 +125,21 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
       google: oauthApp(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),
       twitch: oauthApp(env.TWITCH_CLIENT_ID, env.TWITCH_CLIENT_SECRET),
       facebook: oauthApp(env.FACEBOOK_APP_ID, env.FACEBOOK_APP_SECRET),
+    },
+    news: {
+      nvidiaKey: env.NVIDIA_API_KEY,
+      model: env.NEWS_MODEL,
+      fallbackModel: env.NEWS_FALLBACK_MODEL,
+      geminiKey: env.GEMINI_API_KEY,
+      geminiModel: env.GEMINI_MODEL,
+      show: {
+        name: env.SHOW_NAME ?? DEFAULT_SHOW.name,
+        host: env.SHOW_HOST ?? DEFAULT_SHOW.host,
+        x: (env.SHOW_X ?? DEFAULT_SHOW.x).replace(/^@/, ''),
+        github: env.SHOW_GITHUB ?? DEFAULT_SHOW.github,
+        linkedin: env.SHOW_LINKEDIN ?? DEFAULT_SHOW.linkedin,
+      },
+      fixture: env.NEWS_FIXTURE === '1',
     },
   };
 }

@@ -7,7 +7,7 @@ const CONFETTI_COLORS = ['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', 
 const EMOJI_FONT = `'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', ${FONT}`;
 
 /** A repeatable pseudo-random number for particle `i`: the same on every client and every frame. */
-function rand(i: number, salt: number): number {
+export function rand(i: number, salt: number): number {
   const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
   return x - Math.floor(x);
 }
@@ -38,7 +38,8 @@ function sprite(glyph: string): HTMLCanvasElement {
   return canvas;
 }
 
-function emoji(ctx: CanvasRenderingContext2D, glyph: string, x: number, y: number, size: number, rotation = 0): void {
+/** Stamps one emoji centred on a point. */
+export function drawEmoji(ctx: CanvasRenderingContext2D, glyph: string, x: number, y: number, size: number, rotation = 0): void {
   if (size <= 0) return;
   const box = size * 1.28;
   ctx.save();
@@ -115,7 +116,7 @@ function drawWinner(p: Painter, celebration: Celebration, t: number): void {
   ctx.globalAlpha *= fade;
   const pop = easeOutBack(clamp01(t / 650));
   const bob = Math.sin(t / 280) * unit * 0.8;
-  emoji(ctx, celebration.emoji || '🏆', cx, cy - unit * 6 + bob, unit * 26 * pop, Math.sin(t / 420) * 0.08);
+  drawEmoji(ctx, celebration.emoji || '🏆', cx, cy - unit * 6 + bob, unit * 26 * pop, Math.sin(t / 420) * 0.08);
 
   const textPop = easeOutBack(clamp01((t - 350) / 550));
   if (textPop > 0) {
@@ -138,7 +139,7 @@ function drawWinner(p: Painter, celebration: Celebration, t: number): void {
     const side = i % 2 === 0 ? 0.04 + rand(i, 8) * 0.22 : 0.74 + rand(i, 8) * 0.22;
     ctx.save();
     ctx.globalAlpha *= fade * Math.sin(age * Math.PI);
-    emoji(ctx, extras[i % extras.length]!, size.width * side + Math.sin(age * 6 + i) * unit * 2, size.height * (1 - age * 0.9), unit * (5 + rand(i, 9) * 4), Math.sin(age * 5 + i) * 0.4);
+    drawEmoji(ctx, extras[i % extras.length]!, size.width * side + Math.sin(age * 6 + i) * unit * 2, size.height * (1 - age * 0.9), unit * (5 + rand(i, 9) * 4), Math.sin(age * 5 + i) * 0.4);
     ctx.restore();
   }
 }
@@ -156,7 +157,7 @@ function drawReaction({ ctx, size, unit }: Painter, celebration: Celebration, t:
     const y = size.height * (1.05 - age * (0.55 + rand(i, 3) * 0.5));
     ctx.save();
     ctx.globalAlpha *= clamp01((1 - age) * 2.2);
-    emoji(ctx, celebration.emoji, x, y, unit * (6 + rand(i, 4) * 7) * scale, Math.sin(age * 4 + i) * 0.3);
+    drawEmoji(ctx, celebration.emoji, x, y, unit * (6 + rand(i, 4) * 7) * scale, Math.sin(age * 4 + i) * 0.3);
     ctx.restore();
   }
 }

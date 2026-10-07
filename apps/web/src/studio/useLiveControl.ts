@@ -21,6 +21,8 @@ interface Options {
   scene: Scene;
   sources: StudioSource[];
   egress: EgressStatus | null;
+  /** The host's music, once they have played some. It goes out on every screen, holding screens included. */
+  music: MediaStreamTrack | null;
   /** True when the server reports this broadcast as already live (server-side egress). */
   initiallyLive: boolean;
   onChanged(): void;
@@ -28,7 +30,7 @@ interface Options {
 
 /** The host's Go live / End stream state machine, for both egress modes. */
 export function useLiveControl(opts: Options): LiveControl {
-  const { broadcastId, canvas, scene, sources, egress, onChanged } = opts;
+  const { broadcastId, canvas, scene, sources, egress, music, onChanged } = opts;
   const toast = useToast();
   const [phase, setPhase] = useState<LivePhase>(opts.initiallyLive ? 'live' : 'idle');
   const [startedAt, setStartedAt] = useState<number | null>(opts.initiallyLive ? Date.now() : null);
@@ -49,8 +51,9 @@ export function useLiveControl(opts: Options): LiveControl {
   useEffect(() => {
     if (!mixer.current) return;
     const onStage = new Set(scene.screen === 'live' ? scene.stage : []);
-    mixer.current.sync(sources.filter((s) => onStage.has(s.id)).flatMap((s) => s.audio));
-  }, [scene.stage, scene.screen, sources, phase]);
+    const stage = sources.filter((s) => onStage.has(s.id)).flatMap((s) => s.audio);
+    mixer.current.sync(music ? [...stage, music] : stage);
+  }, [scene.stage, scene.screen, sources, music, phase]);
 
   // The server says the stream is over (every destination dropped, or the worker stopped).
   useEffect(() => {

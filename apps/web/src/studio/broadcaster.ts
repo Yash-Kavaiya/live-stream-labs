@@ -121,7 +121,8 @@ export class ProgramBroadcaster {
     this.capture = captureCanvas(this.canvas);
     const recorder = new MediaRecorder(new MediaStream([this.capture.track, this.mixer.track]), {
       mimeType,
-      videoBitsPerSecond: 5_000_000,
+      // Well above what goes out: this copy is encoded again by the media worker, and should lose little here.
+      videoBitsPerSecond: 12_000_000,
       audioBitsPerSecond: 160_000,
     });
     this.recorder = recorder;

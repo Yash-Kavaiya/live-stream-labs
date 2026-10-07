@@ -101,7 +101,7 @@ type BrandImage = 'logoUrl' | 'overlayUrl' | 'backgroundUrl';
 
 const BRAND_IMAGES: { key: BrandImage; label: string; icon: string; hint: string }[] = [
   { key: 'logoUrl', label: 'Logo', icon: 'verified', hint: 'Top-right corner. A transparent PNG works best.' },
-  { key: 'overlayUrl', label: 'Overlay', icon: 'layers', hint: 'Full frame, drawn over the video. 1280×720 transparent PNG.' },
+  { key: 'overlayUrl', label: 'Overlay', icon: 'layers', hint: 'Full frame, drawn over the video. 1920×1080 transparent PNG.' },
   { key: 'backgroundUrl', label: 'Background', icon: 'wallpaper', hint: 'Full frame, drawn behind the video.' },
 ];
 

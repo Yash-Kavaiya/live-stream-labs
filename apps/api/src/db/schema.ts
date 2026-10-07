@@ -1,4 +1,4 @@
-import type { BroadcastStatus, DestinationStatus, PlatformId, Scene } from '@studio/shared';
+import type { BroadcastStatus, DestinationStatus, PlatformId, Rundown, Scene } from '@studio/shared';
 import { bigint, jsonb, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -89,6 +89,13 @@ export const recordings = pgTable('recordings', {
   file: text('file').notNull(),
   sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
   shareToken: text('share_token').notNull().unique(),
+  createdAt: createdAt(),
+});
+
+/** The daily news rundown: one for the whole installation per day in India. */
+export const rundowns = pgTable('rundowns', {
+  date: text('date').primaryKey(),
+  data: jsonb('data').$type<Rundown>().notNull(),
   createdAt: createdAt(),
 });
 

@@ -129,6 +129,8 @@ export function useStudioRoom(session: StudioSession, join: JoinOptions): Studio
       // The compositor draws from off-screen elements, so visibility-based quality must be off.
       adaptiveStream: false,
       dynacast: true,
+      // Cameras stay at 720p although the program is 1080p: every participant's browser encodes its
+      // camera for the room, and at 1080p that costs enough processor to make the stream stutter.
       videoCaptureDefaults: { resolution: VideoPresets.h720.resolution, deviceId: join.cameraId },
       audioCaptureDefaults: { deviceId: join.micId, ...loadMicPrefs() },
       // Above LiveKit's default for 720p: a blurred or replaced background has soft gradients and

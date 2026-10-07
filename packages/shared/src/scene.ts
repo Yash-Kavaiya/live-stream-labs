@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_PARTY, partySchema } from './party';
 
 export const LAYOUT_IDS = [
   'solo',
@@ -120,6 +121,15 @@ export const brandSchema = z.object({
 });
 export type Brand = z.infer<typeof brandSchema>;
 
+/** A music track the host uploaded for this broadcast. Built-in tracks are not listed here. */
+export const musicTrackSchema = z.object({
+  id: z.string().max(40),
+  name: z.string().max(60),
+  url: assetUrl,
+});
+export type MusicTrack = z.infer<typeof musicTrackSchema>;
+export const MAX_MUSIC_TRACKS = 12;
+
 export const TEMPLATE_IDS = ['none', 'newsroom', 'cricket', 'watchparty'] as const;
 export const templateIdSchema = z.enum(TEMPLATE_IDS);
 export type TemplateId = z.infer<typeof templateIdSchema>;
@@ -141,6 +151,16 @@ export type ScreenId = z.infer<typeof screenIdSchema>;
 export const NEWS_VIEWS = ['anchor', 'interview', 'panel', 'headline'] as const;
 export type NewsView = (typeof NEWS_VIEWS)[number];
 
+/** A page a story came from: drawn as a card on the stream, and opened by the host to share. */
+export const rundownSourceSchema = z.object({
+  url: z.string().max(500).regex(/^https?:\/\//i),
+  title: z.string().max(160),
+  site: z.string().max(40),
+  /** The sentence worth showing on screen. */
+  quote: z.string().max(240),
+});
+export type RundownSource = z.infer<typeof rundownSourceSchema>;
+
 export const newsSchema = z.object({
   view: z.enum(NEWS_VIEWS),
   channel: z.string().max(24),
@@ -150,6 +170,10 @@ export const newsSchema = z.object({
   subhead: z.string().max(120),
   /** Story points for the anchor panel, one per line. */
   points: z.string().max(300),
+  /** The source card on screen, or null. */
+  source: rundownSourceSchema.nullable().default(null),
+  /** The item of the day's rundown that is on air, so the studio can mark it and step from it. */
+  rundownItemId: z.string().max(40).nullable().default(null),
 });
 export type News = z.infer<typeof newsSchema>;
 
@@ -160,6 +184,8 @@ export const DEFAULT_NEWS: News = {
   headline: '',
   subhead: '',
   points: '',
+  source: null,
+  rundownItemId: null,
 };
 
 // ---------- Cricket ----------
@@ -369,6 +395,8 @@ export const sceneSchema = z.object({
   celebration: celebrationSchema.nullable().default(null),
   style: layoutStyleSchema.default(DEFAULT_STYLE),
   activeBannerIds: z.array(z.string().max(40)).max(8).default([]),
+  music: z.array(musicTrackSchema).max(MAX_MUSIC_TRACKS).default([]),
+  party: partySchema.default(DEFAULT_PARTY),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -391,6 +419,8 @@ export const DEFAULT_SCENE: Scene = {
   celebration: null,
   style: DEFAULT_STYLE,
   activeBannerIds: [],
+  music: [],
+  party: DEFAULT_PARTY,
 };
 
 /** Parses a stored or received scene, filling in fields that older scenes do not have. */
@@ -468,6 +498,16 @@ export function removeBanner(scene: Scene, id: string): Scene {
     activeBannerId: scene.activeBannerId === id ? null : scene.activeBannerId,
     activeBannerIds: scene.activeBannerIds.filter((active) => active !== id),
   };
+}
+
+export function addMusicTrack(scene: Scene, track: MusicTrack): Scene {
+  if (scene.music.length >= MAX_MUSIC_TRACKS) return scene;
+  return { ...scene, music: [...scene.music, track] };
+}
+
+export function removeMusicTrack(scene: Scene, id: string): Scene {
+  if (!scene.music.some((t) => t.id === id)) return scene;
+  return { ...scene, music: scene.music.filter((t) => t.id !== id) };
 }
 
 export function hideAllBanners(scene: Scene): Scene {

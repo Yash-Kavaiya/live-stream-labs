@@ -80,6 +80,10 @@ for (const theme of ['light', 'dark'] as const) {
 
     // Cricket: score an over, then both views.
     await useTemplate('cricket');
+    // A new cricket scene follows a live match; the ball buttons belong to scoring by hand.
+    await page.getByTestId('cricket-source-manual').click();
+    // The live feed may already have filled in a finished match: start a fresh innings.
+    await page.getByTestId('cricket-reset').click();
     for (const ball of ['1', '4', '0', 'W', '6', 'wd', '2']) await page.getByTestId(`ball-${ball}`).click();
     await page.waitForTimeout(1200);
     await program('cricket-match');

@@ -3,7 +3,10 @@ import { buildRtmpTarget, redactRtmpTarget } from './platforms';
 import {
   activeBanners,
   addBanner,
+  addMusicTrack,
   addToStage,
+  MAX_MUSIC_TRACKS,
+  removeMusicTrack,
   bannerInSlot,
   hideAllBanners,
   removeBanner,
@@ -106,6 +109,28 @@ describe('sceneSchema', () => {
     expect(sceneSchema.safeParse({ ...DEFAULT_SCENE, stage: ['bogus'] }).success).toBe(false);
     const brand = { ...DEFAULT_SCENE.brand, logoUrl: 'https://evil.example/x.png' };
     expect(sceneSchema.safeParse({ ...DEFAULT_SCENE, brand }).success).toBe(false);
+  });
+});
+
+describe('music tracks', () => {
+  const track = (id: string) => ({ id, name: `Track ${id}`, url: `/assets/${id}.mp3` });
+
+  it('gives a scene saved before music existed an empty list', () => {
+    const { music: _music, ...older } = DEFAULT_SCENE;
+    expect(sceneSchema.parse(older).music).toEqual([]);
+  });
+
+  it('adds tracks up to the limit and removes one by id', () => {
+    let scene = DEFAULT_SCENE;
+    for (let i = 0; i < MAX_MUSIC_TRACKS + 3; i += 1) scene = addMusicTrack(scene, track(String(i)));
+    expect(scene.music).toHaveLength(MAX_MUSIC_TRACKS);
+    expect(removeMusicTrack(scene, '0').music.map((t) => t.id)).not.toContain('0');
+    expect(removeMusicTrack(scene, 'missing')).toBe(scene);
+  });
+
+  it('rejects a track that is not one of our uploads', () => {
+    const music = [{ id: 'x', name: 'x', url: 'https://evil.example/x.mp3' }];
+    expect(sceneSchema.safeParse({ ...DEFAULT_SCENE, music }).success).toBe(false);
   });
 });
 

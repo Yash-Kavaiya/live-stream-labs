@@ -18,6 +18,10 @@ import { Button, Icon, Select, TextField } from '@studio/ui';
 import { useEffect, useState } from 'react';
 import { fetchMatches, pickDefaultMatch, type MatchRef } from '../lib/cricket-feed';
 import { CleanControls } from './clean-controls';
+import { PartyPanel } from './party/party-panel';
+import type { PartyControls } from './party/use-party';
+import { RundownPanel } from './rundown/rundown-panel';
+import type { RundownState } from './rundown/use-rundown';
 
 type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 interface Props {
@@ -263,7 +267,7 @@ function CricketControls({ scene, update, liveScore }: Props & { liveScore?: Liv
         <Button variant="outlined" icon="flag" onClick={startChase} data-testid="cricket-chase">
           Start the chase
         </Button>
-        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, source: 'manual', view: c.view })}>
+        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, source: 'manual', view: c.view })} data-testid="cricket-reset">
           Reset
         </Button>
       </div>
@@ -279,39 +283,6 @@ function CricketControls({ scene, update, liveScore }: Props & { liveScore?: Liv
 
 // ---------- Watch party ----------
 
-const REACTIONS = ['🎉', '😂', '❤️', '🔥', '👏', '😮', '😭', '💯'];
-
-function PartyControls({ update }: Props) {
-  const [winner, setWinner] = useState('');
-  const celebrate = (kind: 'winner' | 'reaction', emoji: string, text: string) =>
-    update((s) => ({
-      ...s,
-      celebration: { id: crypto.randomUUID(), kind, emoji, text, at: Date.now() },
-    }));
-
-  return (
-    <section className="col">
-      <h3 className="title-small">Reactions</h3>
-      <div className="reaction-row" role="group" aria-label="Send a reaction">
-        {REACTIONS.map((emoji) => (
-          <button key={emoji} type="button" className="reaction-button" aria-label={`React with ${emoji}`} data-testid="reaction" onClick={() => celebrate('reaction', emoji, '')}>
-            {emoji}
-          </button>
-        ))}
-      </div>
-
-      <h3 className="title-small">Winner celebration</h3>
-      <TextField label="Winner's name" value={winner} onValue={setWinner} maxLength={40} onEnter={() => celebrate('winner', '🏆', winner.trim())} data-testid="winner-name" />
-      <div>
-        <Button icon="emoji_events" onClick={() => celebrate('winner', '🏆', winner.trim())} data-testid="celebrate-winner">
-          Celebrate winner
-        </Button>
-      </div>
-      <p className="body-small muted">Trophy, confetti and the name over the whole frame for about six seconds.</p>
-    </section>
-  );
-}
-
 /** The studio tab that belongs to each template. */
 export const TEMPLATE_PAGES: Record<TemplateId, { label: string; icon: string }> = {
   none: { label: 'Layout', icon: 'view_quilt' },
@@ -321,13 +292,14 @@ export const TEMPLATE_PAGES: Record<TemplateId, { label: string; icon: string }>
 };
 
 /** The page of controls for whichever template is active. The clean look's page is the layout designer. */
-export function TemplatePage(props: Props & { broadcastId: string; liveScore?: LiveScoreState }) {
+export function TemplatePage(props: Props & { broadcastId: string; liveScore?: LiveScoreState; rundown?: RundownState; party?: PartyControls; stageNames?: string[] }) {
   switch (props.scene.template) {
     case 'none':
       return <CleanControls {...props} />;
     case 'newsroom':
       return (
-        <div className="panel-scroll col">
+        <div className="panel-scroll col" style={{ gap: 20 }}>
+          {props.rundown && <RundownPanel scene={props.scene} update={props.update} state={props.rundown} />}
           <NewsControls {...props} />
         </div>
       );
@@ -340,7 +312,7 @@ export function TemplatePage(props: Props & { broadcastId: string; liveScore?: L
     case 'watchparty':
       return (
         <div className="panel-scroll col">
-          <PartyControls {...props} />
+          {props.party && <PartyPanel scene={props.scene} update={props.update} party={props.party} stageNames={props.stageNames ?? []} />}
         </div>
       );
   }

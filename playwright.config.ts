@@ -27,6 +27,7 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: true,
     timeout: 120_000,
-    env: { NO_WATCH: '1' },
+    // The rundown test needs fixed news: no feeds and no model are called.
+    env: { NO_WATCH: '1', NEWS_FIXTURE: '1' },
   },
 });
