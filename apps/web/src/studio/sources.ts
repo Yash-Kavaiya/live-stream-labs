@@ -1,4 +1,4 @@
-import { sourceId, type ParticipantMeta, type SourceKind, type StudioRole } from '@studio/shared';
+import { sourceId, type ParticipantMeta, type Scene, type SourceKind, type StudioRole } from '@studio/shared';
 import { Track, type Participant, type Room, type TrackPublication } from 'livekit-client';
 
 /** Track names for a video clip a participant is playing into the room. */
@@ -26,7 +26,7 @@ export interface StudioSource {
   isLocal: boolean;
   /** Null while the camera is off or the track is still subscribing; a name card is drawn instead. */
   video: Track | null;
-  /** Audio that goes into the program mix while this source is on stage. */
+  /** This source's own sound. For a camera that is the person's microphone; see `programAudio`. */
   audio: MediaStreamTrack[];
   /** True for a camera whose participant is talking right now. */
   speaking: boolean;
@@ -56,6 +56,28 @@ function audioOf(pub: TrackPublication | undefined): MediaStreamTrack[] {
 
 function byName(participant: Participant, name: string): TrackPublication | undefined {
   return [...participant.trackPublications.values()].find((pub) => pub.trackName === name);
+}
+
+type OnStage = Pick<Scene, 'stage' | 'screen'>;
+
+/**
+ * Who viewers can hear: everyone with a camera, screen or video on stage. Nobody on a holding
+ * screen (starting soon, be right back, ending).
+ */
+export function onAir(sources: StudioSource[], scene: OnStage): Set<string> {
+  if (scene.screen !== 'live') return new Set();
+  return new Set(sources.filter((s) => scene.stage.includes(s.id)).map((s) => s.identity));
+}
+
+/**
+ * The tracks of the program mix: the sound of every source on stage, and the microphone of each
+ * person on air. A presenter stays audible with only their screen on stage; were the microphone
+ * tied to the camera tile, taking the camera off to show a screen full-frame would silence them.
+ */
+export function programAudio(sources: StudioSource[], scene: OnStage): MediaStreamTrack[] {
+  const heard = onAir(sources, scene);
+  const wanted = sources.filter((s) => heard.has(s.identity) && (s.kind === 'cam' || scene.stage.includes(s.id)));
+  return [...new Set(wanted.flatMap((s) => s.audio))];
 }
 
 export interface RoomView {

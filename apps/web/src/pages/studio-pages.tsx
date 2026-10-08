@@ -6,7 +6,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-
 import { api } from '../lib/api';
 import { useAuth, useLoad, useToast } from '../lib/app-context';
 import { GreenRoom } from '../studio/GreenRoom';
-import { readRoom } from '../studio/sources';
+import { programAudio, readRoom } from '../studio/sources';
 import { ProgramCanvas } from '../studio/stage';
 import { LinkButton } from './public';
 import { StudioRoom } from '../studio/StudioRoom';
@@ -138,8 +138,7 @@ export function RenderPage() {
   // Only what is on stage is audible to viewers.
   const playing = useRef(new Map<MediaStreamTrack, HTMLAudioElement>());
   useEffect(() => {
-    const onStage = new Set(scene.screen === 'live' ? scene.stage : []);
-    const wanted = new Set(view.sources.filter((s) => onStage.has(s.id)).flatMap((s) => s.audio));
+    const wanted = new Set(programAudio(view.sources, { stage: scene.stage, screen: scene.screen }));
     for (const [track, el] of playing.current) {
       if (wanted.has(track)) continue;
       el.remove();

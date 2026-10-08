@@ -160,6 +160,7 @@ test('every platform and the recording get moving video and audible audio', asyn
 
   // --- The recording has the same picture and sound, start to finish ---
   await page.getByTestId('end-stream').click();
+  await page.getByTestId('confirm-end').click();
   await expect(page.getByTestId('go-live')).toBeVisible();
   await expect.poll(async () => (await (await page.request.get('/api/recordings')).json()).length, { timeout: 30_000 }).toBe(1);
   const [recording] = await (await page.request.get('/api/recordings')).json();

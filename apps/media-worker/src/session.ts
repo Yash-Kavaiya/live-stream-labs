@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { redactRtmpTarget, type EgressJob, type EgressStatus, type TargetStatus } from '@studio/shared';
-import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, parseFailedOutput, parseProgress, type TeeOutput } from './ffmpeg-args';
+import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, isQueueOverflow, parseFailedOutput, parseProgress, parseUnopenedOutput, type TeeOutput } from './ffmpeg-args';
 
 /** If ffmpeg cannot keep up, stop rather than buffer without bound. */
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
@@ -30,9 +30,12 @@ export class EgressSession {
   private readonly recordingFile: string | null;
   private state: EgressStatus['state'] = 'starting';
   private stopping = false;
+  /** The session stopped itself because ffmpeg fell too far behind; the host is told why. */
+  private overloaded = false;
   private lastError: string | null = null;
   private killTimer: NodeJS.Timeout | undefined;
   private lastHealthAt = Date.now();
+  private lastOverflowAt = 0;
   /** Last few non-progress log lines, printed when ffmpeg exits abnormally. */
   private readonly logTail: string[] = [];
   readonly done: Promise<void>;
@@ -82,7 +85,9 @@ export class EgressSession {
   write(chunk: Buffer): boolean {
     if (this.stopping || this.ffmpeg.stdin.destroyed) return false;
     if (this.ffmpeg.stdin.writableLength > MAX_BUFFERED_BYTES) {
-      this.lastError = 'The encoder could not keep up with the incoming stream';
+      this.lastError = 'This computer could not encode the stream fast enough, so it was stopped';
+      this.overloaded = true;
+      this.opts.log(this.lastError);
       this.stop();
       return false;
     }
@@ -106,15 +111,24 @@ export class EgressSession {
       this.logTail.push(line.trim());
       if (this.logTail.length > 12) this.logTail.shift();
     }
-    const failed = parseFailedOutput(line);
+    const unopened = parseUnopenedOutput(line);
+    const failed = unopened === null ? parseFailedOutput(line) : this.opts.job.targets.findIndex((t) => t.url === unopened);
     if (failed !== null) {
       const target = this.targets[failed];
       // An index past the RTMP targets is the recording file.
       if (target && target.status !== 'failed') {
         target.status = 'failed';
         target.error = 'The platform closed the connection or rejected the stream key';
-        this.opts.log(`target ${failed} failed: ${line.trim()}`);
+        this.opts.log(`target ${failed} failed: ${unopened === null ? line.trim() : `could not connect to ${redactRtmpTarget(unopened)}`}`);
         this.emit();
+      }
+      return;
+    }
+    if (isQueueOverflow(line)) {
+      const now = Date.now();
+      if (now - this.lastOverflowAt >= HEALTH_EVERY_MS) {
+        this.lastOverflowAt = now;
+        this.opts.log('a destination is taking the stream too slowly and part of it was dropped there. The upload is too slow for this many destinations; the others are not affected.');
       }
       return;
     }
@@ -153,8 +167,9 @@ export class EgressSession {
     clearTimeout(this.killTimer);
     if (this.state === 'ended' || this.state === 'failed') return;
 
-    // A clean stop, or a crash after frames went out, both count as "ended".
-    const failed = !this.stopping && this.state === 'starting';
+    // A clean stop, or a crash after frames went out, both count as "ended". Falling too far
+    // behind is a failure whenever it happens, so that the host hears the reason.
+    const failed = this.overloaded || (!this.stopping && this.state === 'starting');
     this.state = failed ? 'failed' : 'ended';
     for (const target of this.targets) {
       if (target.status === 'failed') continue;

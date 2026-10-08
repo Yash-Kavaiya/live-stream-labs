@@ -1,12 +1,12 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
-import type { AddressInfo } from 'node:net';
+import { createServer as createNetServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { EgressStatus } from '@studio/shared';
 import { describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, parseFailedOutput, parseProgress, teeSpec } from './ffmpeg-args';
+import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, isQueueOverflow, parseFailedOutput, parseProgress, parseUnopenedOutput, teeSpec } from './ffmpeg-args';
 import { startWorker, type ApiClient } from './server';
 
 describe('ffmpeg arguments', () => {
@@ -16,7 +16,7 @@ describe('ffmpeg arguments', () => {
       { format: 'mp4', url: 'C:\\data\\rec.mp4' },
     ]);
     expect(spec).toBe(
-      '[f=flv:flvflags=no_duration_filesize:onfail=ignore]rtmp://a.example/live/key1|' +
+      '[f=flv:flvflags=no_duration_filesize:onfail=ignore:use_fifo=1:fifo_options=queue_size=1500\\\\:drop_pkts_on_overflow=1:rw_timeout=10000000]rtmp://a.example/live/key1|' +
         '[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof:onfail=ignore]C:/data/rec.mp4',
     );
   });
@@ -67,6 +67,10 @@ describe('ffmpeg arguments', () => {
   it('reads ffmpeg log lines', () => {
     expect(parseFailedOutput('[tee @ 0x1] Slave muxer #1 failed: I/O error, continuing')).toBe(1);
     expect(parseFailedOutput('frame=  10 fps=30')).toBeNull();
+    // A destination that never connects is reported by its queue, with its address.
+    expect(parseUnopenedOutput('[fifo @ 000002037e687c40] Error opening rtmp://127.0.0.1:9/live/key: Error number -138 occurred')).toBe('rtmp://127.0.0.1:9/live/key');
+    expect(parseUnopenedOutput('[tee @ 0x1] Slave muxer #1 failed: I/O error, continuing')).toBeNull();
+    expect(isQueueOverflow('[fifo @ 000002037e687c40] FIFO queue full')).toBe(true);
     expect(isProgressLine('frame=   42 fps= 30 q=23.0 size=N/A')).toBe(true);
   });
 });
@@ -101,6 +105,37 @@ describe.skipIf(!hasFfmpeg)('encoded stream', () => {
       expect(kbit).toBeGreaterThan(5100);
       expect(kbit).toBeLessThan(6900);
     }
+  }, 60_000);
+
+  it('keeps the other outputs running when one destination stops taking the stream', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'studio-stall-'));
+    const output = path.join(dir, 'out.mp4');
+    // A platform that accepts the connection and then never reads: an upload that has stalled.
+    const stalled = createNetServer((socket) => socket.pause());
+    await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', resolve));
+    const { port } = stalled.address() as AddressInfo;
+
+    const args = buildFfmpegArgs([
+      { format: 'flv', url: `tcp://127.0.0.1:${port}` },
+      { format: 'mp4', url: output },
+    ]);
+    // Six seconds at the speed of a live stream, in place of the browser's pipe.
+    const input = ['-re', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30:duration=6', '-re', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=6'];
+    const from = args.indexOf('-fflags');
+    const to = args.indexOf('pipe:0');
+    const live = [...args.slice(0, from), ...input, ...args.slice(to + 1)].map((arg) => (arg === '0:a:0?' ? '1:a:0' : arg));
+
+    const ffmpeg = spawn('ffmpeg', ['-y', ...live], { stdio: 'ignore' });
+    const finished = await Promise.race([
+      new Promise<boolean>((resolve) => ffmpeg.once('close', () => resolve(true))),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 30_000)),
+    ]);
+    ffmpeg.kill('SIGKILL');
+    stalled.close();
+
+    expect(finished).toBe(true);
+    const seconds = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', output]).toString());
+    expect(seconds).toBeGreaterThan(5);
   }, 60_000);
 });
 

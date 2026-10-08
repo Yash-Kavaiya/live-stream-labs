@@ -28,6 +28,18 @@ function escapeTee(url: string): string {
   return url.replace(/\\/g, '/').replace(/(['|])/g, '\\$1');
 }
 
+/** About 20 seconds of video and audio packets: what one destination may fall behind by. */
+const QUEUE_PACKETS = 1500;
+
+/**
+ * Each platform gets a queue of its own. The tee muxer otherwise writes to its outputs in turn, so
+ * one platform that takes the upload slowly holds back all the others and the encoder with them,
+ * until the whole stream is so far behind that it is stopped. With a queue, a slow platform loses
+ * some of its own stream and nobody else notices. The inner `:` is escaped twice, once for each
+ * level of options.
+ */
+const NETWORK_QUEUE = `use_fifo=1:fifo_options=queue_size=${QUEUE_PACKETS}\\\\:drop_pkts_on_overflow=1:rw_timeout=10000000`;
+
 export function teeSpec(outputs: TeeOutput[]): string {
   return outputs
     .map(({ format, url }) => {
@@ -35,7 +47,7 @@ export function teeSpec(outputs: TeeOutput[]): string {
       const options =
         format === 'mp4'
           ? 'f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof:onfail=ignore'
-          : 'f=flv:flvflags=no_duration_filesize:onfail=ignore';
+          : `f=flv:flvflags=no_duration_filesize:onfail=ignore:${NETWORK_QUEUE}`;
       return `[${options}]${escapeTee(url)}`;
     })
     .join('|');
@@ -99,10 +111,21 @@ export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = D
   ];
 }
 
+/** True when a destination's queue filled up and part of its stream was thrown away. */
+export function isQueueOverflow(line: string): boolean {
+  return /FIFO queue full/i.test(line);
+}
+
 /** `Slave muxer #1 failed: ...` → 1. The index matches the order of `outputs`. */
 export function parseFailedOutput(line: string): number | null {
   const match = /Slave muxer #(\d+) failed/.exec(line);
   return match ? Number(match[1]) : null;
+}
+
+/** `[fifo @ ...] Error opening rtmp://host/app/key: ...` → the address that could not be reached. */
+export function parseUnopenedOutput(line: string): string | null {
+  const match = /\[fifo @ [^\]]+\] Error opening (.+): [^:]+$/.exec(line);
+  return match ? match[1]! : null;
 }
 
 export interface Progress {

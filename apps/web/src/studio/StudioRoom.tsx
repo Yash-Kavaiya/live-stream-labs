@@ -8,7 +8,7 @@ import {
   type DestinationStatus,
   type StudioSession,
 } from '@studio/shared';
-import { Button, Icon, IconButton, Spinner, Tabs } from '@studio/ui';
+import { Button, Dialog, Icon, IconButton, Spinner, Tabs } from '@studio/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -21,6 +21,7 @@ import { shareVideoClip, useAutoDirector, useComments, useElapsed, useSceneContr
 import { BannersPanel } from './banners-panel';
 import { BrandPanel, ChatPanel, CommentsPanel, ScenesPanel } from './panels';
 import { LayoutPicker } from './LayoutThumb';
+import { onAir } from './sources';
 import { ProgramCanvas, SourceTile } from './stage';
 import { TEMPLATE_PAGES, TemplatePage } from './template-panels';
 import { useLiveCricket } from './live-cricket';
@@ -100,7 +101,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
   const elapsed = useElapsed(live.startedAt);
 
   const [panel, setPanel] = useState<PanelId>(isHost ? 'scenes' : 'chat');
-  const [dialog, setDialog] = useState<'invite' | 'destinations' | 'settings' | null>(null);
+  const [dialog, setDialog] = useState<'invite' | 'destinations' | 'settings' | 'end' | null>(null);
   const [menu, setMenu] = useState<'mic' | 'camera' | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const micCaret = useRef<HTMLButtonElement>(null);
@@ -152,7 +153,8 @@ export function StudioRoom({ session, join, onExit }: Props) {
   );
 
   // The music makes room while someone on stage is talking. Nobody is heard on a holding screen.
-  const someoneSpeaking = scene.screen === 'live' && view.sources.some((s) => s.speaking && scene.stage.includes(s.id));
+  const heard = onAir(view.sources, scene);
+  const someoneSpeaking = view.sources.some((s) => s.speaking && heard.has(s.identity));
   useEffect(() => music?.setSpeaking(someoneSpeaking), [music, someoneSpeaking]);
 
   // Take sources off the stage once they are gone (guest left, screen share stopped). The delay
@@ -294,7 +296,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
               <span className="wide-only">Invite</span>
             </Button>
             {isLive || live.phase === 'ending' ? (
-              <Button danger icon="stop_circle" onClick={() => void live.end()} disabled={live.phase === 'ending'} data-testid="end-stream">
+              <Button danger icon="stop_circle" onClick={() => setDialog('end')} disabled={live.phase === 'ending'} data-testid="end-stream">
                 End stream
               </Button>
             ) : (
@@ -448,6 +450,29 @@ export function StudioRoom({ session, join, onExit }: Props) {
       {isHost && (
         <>
           <InviteDialog broadcastId={broadcastId} open={dialog === 'invite'} onClose={() => setDialog(null)} />
+          <Dialog
+            open={dialog === 'end' && isLive}
+            onClose={() => setDialog(null)}
+            headline="End the stream?"
+            icon="stop_circle"
+            actions={
+              <>
+                <Button variant="text" onClick={() => setDialog(null)} data-testid="cancel-end">Keep streaming</Button>
+                <Button danger onClick={() => { setDialog(null); void live.end(); }} data-testid="confirm-end">End stream</Button>
+              </>
+            }
+          >
+            <p className="body-medium">This stops the stream on every destination. Viewers will see it end.</p>
+          </Dialog>
+          <Dialog
+            open={live.stopped !== null}
+            onClose={live.dismissStopped}
+            headline="You are not live streaming"
+            icon="error"
+            actions={<Button variant="text" onClick={live.dismissStopped} data-testid="stopped-ok">OK</Button>}
+          >
+            <p className="body-medium" data-testid="stopped-reason">{live.stopped}</p>
+          </Dialog>
           {broadcast.data && (
             <DestinationsDialog broadcast={broadcast.data} open={dialog === 'destinations'} onClose={() => setDialog(null)} onSaved={broadcast.setData} />
           )}

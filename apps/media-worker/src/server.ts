@@ -104,7 +104,7 @@ export function startWorker(cfg: WorkerConfig, api: ApiClient = httpApiClient(cf
 
     await session.done;
     if (sessions.get(job.broadcastId) === entry) sessions.delete(job.broadcastId);
-    if (socket.readyState === socket.OPEN) socket.close(CLOSE_ENDED, 'Stream ended');
+    if (socket.readyState === socket.OPEN) socket.close(CLOSE_ENDED, 'The streaming server ended the stream');
   });
 
   server.on('close', () => {

@@ -177,6 +177,7 @@ test('host and guest go live to two destinations, and the stream is recorded', a
 
   // --- End the stream; a recording appears and plays back ---
   await page.getByTestId('end-stream').click();
+  await page.getByTestId('confirm-end').click();
   await expect(page.getByTestId('go-live')).toBeVisible();
 
   await expect
