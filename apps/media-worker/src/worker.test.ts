@@ -214,4 +214,64 @@ describe.skipIf(!hasFfmpeg)('worker end to end (real ffmpeg)', () => {
     ]);
     expect(probe.toString().split(/\s+/).filter(Boolean).sort()).toEqual(['aac', 'h264']);
   }, 40_000);
+
+  /** A worker whose single job records only, so no destination can fail the test. */
+  async function recordingWorker(reconnectGraceMs: number) {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'worker-drop-'));
+    const statuses: { at: number; status: EgressStatus }[] = [];
+    const api: ApiClient = {
+      claim: async () => ({ broadcastId: 'bc1', record: true, targets: [] }),
+      report: async (status) => void statuses.push({ at: Date.now(), status }),
+    };
+    const server = startWorker(
+      { port: 0, apiUrl: '', internalSecret: '', dataDir, ffmpegPath: 'ffmpeg', reconnectGraceMs },
+      api,
+    );
+    await new Promise((r) => server.once('listening', r));
+    const { port } = server.address() as AddressInfo;
+    const terminal = () => statuses.filter(({ status }) => status.state === 'ended' || status.state === 'failed');
+    return { server, port, statuses, terminal };
+  }
+
+  /** Streams for `seconds` over a new ingest connection and returns the open socket. */
+  async function streamFor(port: number, seconds: number) {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ingest?token=good`);
+    await new Promise((r) => socket.once('open', r));
+    const source = fakeBrowserStream(seconds);
+    source.stdout.on('data', (chunk: Buffer) => socket.readyState === socket.OPEN && socket.send(chunk));
+    await new Promise((r) => source.once('close', r));
+    return socket;
+  }
+
+  it('keeps the broadcast going when the connection drops and comes back', async () => {
+    const { server, port, statuses, terminal } = await recordingWorker(8_000);
+
+    // The network drops: no close frame, as when Wi-Fi goes away.
+    (await streamFor(port, 3)).terminate();
+    await new Promise((r) => setTimeout(r, 1_500));
+    (await streamFor(port, 3)).close(1000);
+
+    await expect.poll(() => terminal().length, { timeout: 20_000 }).toBe(1);
+    server.close();
+
+    // Only the deliberate end at the very close counts; the drop in between ended nothing.
+    expect(terminal()[0]!.status.state).toBe('ended');
+    expect(statuses.at(-1)!.status.state).toBe('ended');
+    expect(statuses.filter(({ status }) => status.state === 'live').length).toBe(2);
+    // Each stretch of the stream keeps its recording.
+    expect(new Set(statuses.map(({ status }) => status.recording?.file).filter(Boolean)).size).toBe(2);
+  }, 60_000);
+
+  it('ends the broadcast when a dropped connection does not come back in time', async () => {
+    const { server, port, terminal } = await recordingWorker(3_000);
+
+    const socket = await streamFor(port, 3);
+    const droppedAt = Date.now();
+    socket.terminate();
+
+    await expect.poll(() => terminal().length, { timeout: 20_000 }).toBe(1);
+    server.close();
+    expect(terminal()[0]!.at - droppedAt).toBeGreaterThanOrEqual(3_000);
+    expect(terminal()[0]!.status.state).toBe('ended');
+  }, 60_000);
 });

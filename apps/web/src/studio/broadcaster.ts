@@ -1,3 +1,5 @@
+import { reconnectDelay, RECONNECT_WINDOW_MS, shouldReconnect, STALL_LIMIT_MS, StallWatch } from './reconnect';
+
 /** Mixes the audio of everything on stage into one track for the program. */
 export class AudioMixer {
   private readonly ctx = new AudioContext();
@@ -91,70 +93,132 @@ function captureCanvas(canvas: HTMLCanvasElement): { track: MediaStreamTrack; st
   };
 }
 
+function openSocket(url: string): Promise<WebSocket> {
+  const socket = new WebSocket(url);
+  return new Promise((resolve, reject) => {
+    socket.onopen = () => resolve(socket);
+    socket.onerror = () => reject(new Error('Could not reach the streaming server'));
+  });
+}
+
+export interface BroadcasterEvents {
+  /** The stream stopped for any reason other than `stop()`. */
+  onInterrupted(reason: string): void;
+  /** The connection dropped and the broadcaster is getting it back; the platforms are waiting. */
+  onReconnecting(): void;
+  onReconnected(): void;
+}
+
 /**
  * Relay egress, browser side: records the program canvas plus the audio mix and streams the
  * chunks to the media worker, which transcodes and fans out to the platforms.
+ *
+ * A connection that drops is opened again with a fresh recording (the worker needs a stream that
+ * starts from its header). The worker holds the broadcast open while that happens, so a network
+ * blip or a worker restart costs the viewers a few seconds, not the broadcast.
  */
 export class ProgramBroadcaster {
   private socket: WebSocket | null = null;
   private recorder: MediaRecorder | null = null;
   private capture: ReturnType<typeof captureCanvas> | null = null;
+  private ingestUrl = '';
+  private mimeType = '';
+  private stopped = false;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly mixer: AudioMixer,
-    /** Called when the stream stops for any reason other than `stop()`. */
-    private readonly onInterrupted: (reason: string) => void,
+    private readonly events: BroadcasterEvents,
   ) {}
 
   async start(ingestUrl: string): Promise<void> {
     const mimeType = MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
     if (!mimeType) throw new Error('This browser cannot record the program stream');
+    this.ingestUrl = ingestUrl;
+    this.mimeType = mimeType;
 
-    const socket = new WebSocket(ingestUrl);
-    this.socket = socket;
-    await new Promise<void>((resolve, reject) => {
-      socket.onopen = () => resolve();
-      socket.onerror = () => reject(new Error('Could not reach the streaming server'));
-    });
-
+    const socket = await openSocket(ingestUrl);
+    if (this.stopped) return void socket.close(1000);
     this.capture = captureCanvas(this.canvas);
-    const recorder = new MediaRecorder(new MediaStream([this.capture.track, this.mixer.track]), {
-      mimeType,
+    this.attach(socket);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    clearTimeout(this.retryTimer);
+    const socket = this.socket;
+    const recorder = this.recorder;
+    this.socket = null;
+    this.recorder = null;
+    if (recorder && recorder.state !== 'inactive') {
+      // Let the final chunk go out before closing the socket.
+      recorder.onstop = () => socket?.close(1000);
+      recorder.stop();
+    } else {
+      socket?.close(1000);
+    }
+    this.capture?.stop();
+    this.capture = null;
+  }
+
+  /** Records onto this connection, from a fresh header. */
+  private attach(socket: WebSocket): void {
+    this.socket = socket;
+    const recorder = new MediaRecorder(new MediaStream([this.capture!.track, this.mixer.track]), {
+      mimeType: this.mimeType,
       // Well above what goes out: this copy is encoded again by the media worker, and should lose little here.
       videoBitsPerSecond: 12_000_000,
       audioBitsPerSecond: 160_000,
     });
     this.recorder = recorder;
+    const stall = new StallWatch(STALL_LIMIT_MS, Date.now());
     recorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) socket.send(event.data);
+      if (this.socket !== socket || event.data.size === 0 || socket.readyState !== WebSocket.OPEN) return;
+      if (stall.check(socket.bufferedAmount, Date.now())) {
+        this.dropped(socket, 1006, '');
+        return;
+      }
+      socket.send(event.data);
+      stall.sent(socket.bufferedAmount);
     };
-    socket.onclose = (event) => {
-      if (this.socket !== socket) return; // stop() was called.
-      this.release();
-      this.onInterrupted(event.reason || 'The connection to the streaming server was lost');
-    };
+    socket.onclose = (event) => this.dropped(socket, event.code, event.reason);
     recorder.start(CHUNK_MS);
   }
 
-  stop(): void {
-    const socket = this.socket;
-    const recorder = this.recorder;
+  /** The connection is gone without `stop()`: get it back, or give up and say why. */
+  private dropped(socket: WebSocket, code: number, reason: string): void {
+    if (this.socket !== socket) return; // stop() was called, or this one was already let go.
     this.socket = null;
-    if (recorder && recorder.state !== 'inactive') {
-      // Let the final chunk go out before closing the socket.
-      recorder.onstop = () => socket?.close(1000);
-    } else {
-      socket?.close(1000);
-    }
-    this.release();
-  }
-
-  private release(): void {
+    socket.onclose = null;
+    socket.close();
     if (this.recorder && this.recorder.state !== 'inactive') this.recorder.stop();
     this.recorder = null;
-    this.capture?.stop();
-    this.capture = null;
-    this.socket = null;
+
+    if (!shouldReconnect(code)) return this.interrupted(reason || 'The connection to the streaming server was lost');
+    this.events.onReconnecting();
+    void this.reconnect(Date.now() + RECONNECT_WINDOW_MS, 0);
+  }
+
+  private async reconnect(deadline: number, failures: number): Promise<void> {
+    if (this.stopped) return;
+    try {
+      const socket = await openSocket(this.ingestUrl);
+      if (this.stopped) return void socket.close(1000);
+      this.attach(socket);
+      this.events.onReconnected();
+    } catch {
+      const delay = reconnectDelay(failures);
+      if (Date.now() + delay > deadline) {
+        return this.interrupted('The connection to the streaming server was lost and could not be restored');
+      }
+      this.retryTimer = setTimeout(() => void this.reconnect(deadline, failures + 1), delay);
+    }
+  }
+
+  private interrupted(reason: string): void {
+    if (this.stopped) return;
+    this.stop();
+    this.events.onInterrupted(reason);
   }
 }

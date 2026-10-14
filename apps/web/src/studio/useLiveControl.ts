@@ -86,10 +86,14 @@ export function useLiveControl(opts: Options): LiveControl {
       const result = await api.goLive(broadcastId);
       if (result.mode === 'relay' && result.ingestUrl) {
         mixer.current = new AudioMixer();
-        broadcaster.current = new ProgramBroadcaster(canvas.current, mixer.current, (reason) => {
-          setStopped((current) => current ?? reason);
-          release();
-          void api.endBroadcast(broadcastId).finally(onChanged);
+        broadcaster.current = new ProgramBroadcaster(canvas.current, mixer.current, {
+          onInterrupted: (reason) => {
+            setStopped((current) => current ?? reason);
+            release();
+            void api.endBroadcast(broadcastId).finally(onChanged);
+          },
+          onReconnecting: () => toast.show('Connection to the streaming server lost. Reconnecting; you are still live.'),
+          onReconnected: () => toast.show('Reconnected. The stream is going out again.'),
         });
         await broadcaster.current.start(result.ingestUrl);
       }
@@ -102,7 +106,7 @@ export function useLiveControl(opts: Options): LiveControl {
       await api.endBroadcast(broadcastId).catch(() => undefined);
     }
     onChanged();
-  }, [broadcastId, canvas, onChanged, release]);
+  }, [broadcastId, canvas, onChanged, release, toast]);
 
   const end = useCallback(async () => {
     setPhase('ending');
