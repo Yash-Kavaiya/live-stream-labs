@@ -24,6 +24,8 @@ import {
 import { roomName } from '../services/livekit';
 
 const INVITE_DAYS = 7;
+/** 9 bytes is a 12-character code: short enough to read out, far too many to guess. */
+const INVITE_TOKEN_BYTES = 9;
 
 export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
   const { db, livekit, config } = deps;
@@ -150,14 +152,14 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
   app.post('/api/broadcasts/:id/invites', async (req): Promise<InviteDto> => {
     const userId = await requireUserId(deps, req);
     const broadcast = await getOwnedBroadcast(deps, userId, (req.params as { id: string }).id);
-    const token = randomToken(24);
+    const token = randomToken(INVITE_TOKEN_BYTES);
     const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
     await db
       .insert(invites)
       .values({ id: newId(), broadcastId: broadcast.id, tokenHash: sha256(token), expiresAt });
     return {
       token,
-      url: `${config.webOrigin}/join/${token}`,
+      url: `${config.webOrigin}/j/${token}`,
       expiresAt: expiresAt.toISOString(),
     };
   });

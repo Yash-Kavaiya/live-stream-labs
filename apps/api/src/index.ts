@@ -8,7 +8,8 @@ import { collectFixture } from './news/fixture';
 import { startSchedule } from './news/schedule';
 import { dbStore, memoryStore, RundownService } from './news/service';
 import { collectNews } from './news/sources';
-import { createWriter } from './news/writer';
+import { createWriter, providersFor } from './news/writer';
+import { createQuizWriter } from './quiz/writer';
 import { LiveKitService } from './services/livekit';
 
 loadDotEnv();
@@ -32,6 +33,8 @@ const app = await buildApp({
   adapterFor: createAdapterResolver(config),
   fetch,
   rundowns,
+  // Quizzes are written while the class waits, so the fast Gemini model goes first.
+  quiz: createQuizWriter(providersFor(config.news, fetch).sort((a, b) => Number(b.name.startsWith('gemini')) - Number(a.name.startsWith('gemini')))),
 });
 
 await app.listen({ host: '0.0.0.0', port: config.port });

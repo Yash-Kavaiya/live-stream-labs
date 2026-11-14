@@ -1,7 +1,7 @@
 import type { Celebration } from '@studio/shared';
 import { FONT, label, type Painter } from './painter';
 
-export const CELEBRATION_MS: Record<Celebration['kind'], number> = { winner: 6500, reaction: 3800, moment: 3600 };
+export const CELEBRATION_MS: Record<Celebration['kind'], number> = { winner: 6500, reaction: 3800 };
 
 const CONFETTI_COLORS = ['#4285F4', '#EA4335', '#FBBC04', '#34A853', '#FF6D01', '#A142F4', '#FFFFFF'];
 const EMOJI_FONT = `'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', ${FONT}`;

@@ -14,6 +14,7 @@ import { collectFixture } from './news/fixture';
 import { dbStore, RundownService } from './news/service';
 import type { Collected } from './news/sources';
 import { createWriter, type Writer } from './news/writer';
+import { createQuizWriter, type QuizWriter } from './quiz/writer';
 import { FakeLiveKit } from './services/livekit';
 
 export interface TestApp {
@@ -25,7 +26,7 @@ export interface TestApp {
 
 /** A full API on an in-memory database, with LiveKit and outbound HTTP faked. */
 export async function createTestApp(
-  opts: { env?: Record<string, string>; fetch?: Fetch; collect?: (now: Date) => Promise<Collected>; writer?: Writer; now?: () => Date } = {},
+  opts: { env?: Record<string, string>; fetch?: Fetch; collect?: (now: Date) => Promise<Collected>; writer?: Writer; now?: () => Date; quiz?: QuizWriter } = {},
 ): Promise<TestApp> {
   const config: Config = loadConfig({
     NODE_ENV: 'test',
@@ -51,6 +52,7 @@ export async function createTestApp(
     fetch: fetchFn,
     // No network and no model: fixed news, and the rundown that is built without scripts.
     rundowns: new RundownService(dbStore(db), opts.collect ?? collectFixture, opts.writer ?? createWriter(config.news, fetchFn, []), opts.now),
+    quiz: opts.quiz ?? createQuizWriter([]),
   };
   const app = await buildApp(deps);
   return {

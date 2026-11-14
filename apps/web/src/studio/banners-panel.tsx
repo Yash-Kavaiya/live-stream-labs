@@ -6,6 +6,7 @@ import {
   hideAllBanners,
   removeBanner,
   toggleBanner,
+  updateBanner,
   type Banner,
   type BannerSlot,
   type BannerStyle,
@@ -57,6 +58,7 @@ export function BannersPanel({ broadcastId, scene, update, music, ensureMusic, h
   const [subtitle, setSubtitle] = useState('');
   const info = BANNER_STYLE_INFO[style];
   const shown = new Set(activeBanners(scene).map((b) => b.id));
+  const [editing, setEditing] = useState<string | null>(null);
 
   const add = () => {
     const value = text.trim();
@@ -86,7 +88,7 @@ export function BannersPanel({ broadcastId, scene, update, music, ensureMusic, h
             </button>
           ))}
         </div>
-        <p className="body-small muted">Adds the banner and shows it. Edit the wording by deleting it and making your own below.</p>
+        <p className="body-small muted">Adds the banner and shows it. Change the wording with the pencil next to it under Your banners.</p>
       </section>
 
       <section className="col">
@@ -110,7 +112,7 @@ export function BannersPanel({ broadcastId, scene, update, music, ensureMusic, h
         <p className="body-small muted">
           {info.hint} Shows in: {SLOT_LABELS[info.slot].toLowerCase()}.
         </p>
-        <TextField label={style === 'social' ? 'Handle' : style === 'name-title' ? 'Name' : 'Text'} value={text} onValue={setText} maxLength={200} onEnter={add} data-testid="banner-text" />
+        <TextField label={textLabel(style)} value={text} onValue={setText} maxLength={200} onEnter={add} data-testid="banner-text" />
         {info.subtitle && <TextField label={info.subtitle} value={subtitle} onValue={setSubtitle} maxLength={120} onEnter={add} data-testid="banner-subtitle" />}
         <div>
           <Button variant="tonal" icon="add" onClick={add} disabled={!text.trim()} data-testid="banner-add">
@@ -137,6 +139,9 @@ export function BannersPanel({ broadcastId, scene, update, music, ensureMusic, h
         {scene.banners.map((banner) => {
           const isShown = shown.has(banner.id);
           const bannerInfo = BANNER_STYLE_INFO[banner.style];
+          if (editing === banner.id) {
+            return <BannerEditor key={banner.id} banner={banner} onSave={(change) => { update((s) => updateBanner(s, banner.id, change)); setEditing(null); }} onCancel={() => setEditing(null)} />;
+          }
           return (
             <div key={banner.id} className={`banner-item ${isShown ? 'shown' : ''}`}>
               <button
@@ -156,11 +161,41 @@ export function BannersPanel({ broadcastId, scene, update, music, ensureMusic, h
                 </span>
                 {isShown && <span className="chip primary">Showing</span>}
               </button>
+              <IconButton icon="edit" label="Edit banner" onClick={() => setEditing(banner.id)} data-testid="banner-edit" />
               <IconButton icon="delete" label="Delete banner" onClick={() => update((s) => removeBanner(s, banner.id))} />
             </div>
           );
         })}
       </section>
+    </div>
+  );
+}
+
+function textLabel(style: BannerStyle): string {
+  return style === 'social' ? 'Handle' : style === 'name-title' ? 'Name' : 'Text';
+}
+
+/** Edits a banner's wording in place. Saving updates it on screen if it is showing. */
+function BannerEditor({ banner, onSave, onCancel }: { banner: Banner; onSave(change: { text: string; subtitle: string }): void; onCancel(): void }) {
+  const info = BANNER_STYLE_INFO[banner.style];
+  const [text, setText] = useState(banner.text);
+  const [subtitle, setSubtitle] = useState(banner.subtitle);
+  const save = () => {
+    if (text.trim()) onSave({ text, subtitle: info.subtitle ? subtitle : banner.subtitle });
+  };
+  return (
+    <div className="banner-editor col" data-testid="banner-editor">
+      <span className="label-medium muted">Edit {info.label.toLowerCase()}</span>
+      <TextField label={textLabel(banner.style)} value={text} onValue={setText} maxLength={200} onEnter={save} data-testid="banner-edit-text" />
+      {info.subtitle && <TextField label={info.subtitle} value={subtitle} onValue={setSubtitle} maxLength={120} onEnter={save} data-testid="banner-edit-subtitle" />}
+      <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+        <Button variant="text" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button variant="tonal" icon="check" onClick={save} disabled={!text.trim()} data-testid="banner-edit-save">
+          Save
+        </Button>
+      </div>
     </div>
   );
 }

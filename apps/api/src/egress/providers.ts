@@ -26,7 +26,8 @@ export interface EgressStart {
 /** How the composed program gets from the studio to the RTMP destinations. */
 export interface EgressProvider {
   readonly mode: 'relay' | 'livekit';
-  start(broadcastId: string, targets: EgressTarget[]): Promise<EgressStart>;
+  /** `record` false streams to the destinations only, with no file kept. */
+  start(broadcastId: string, targets: EgressTarget[], opts: { record: boolean }): Promise<EgressStart>;
   stop(broadcastId: string, externalId: string | null): Promise<void>;
 }
 
@@ -70,7 +71,7 @@ export class LiveKitEgress implements EgressProvider {
     this.client = new EgressClient(url.replace(/^ws/, 'http'), apiKey, apiSecret);
   }
 
-  async start(broadcastId: string, targets: EgressTarget[]): Promise<EgressStart> {
+  async start(broadcastId: string, targets: EgressTarget[], { record }: { record: boolean }): Promise<EgressStart> {
     const info = await this.client.startRoomCompositeEgress(
       roomName(broadcastId),
       {
@@ -78,7 +79,7 @@ export class LiveKitEgress implements EgressProvider {
           protocol: StreamProtocol.RTMP,
           urls: targets.map((t) => t.url),
         }),
-        file: new EncodedFileOutput({ filepath: `recordings/${broadcastId}-{time}.mp4` }),
+        ...(record ? { file: new EncodedFileOutput({ filepath: `recordings/${broadcastId}-{time}.mp4` }) } : {}),
       },
       {
         customBaseUrl: `${this.config.webOrigin}/render`,

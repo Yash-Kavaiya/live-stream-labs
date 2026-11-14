@@ -1,7 +1,8 @@
 import { PLATFORMS, type BroadcastDto, type DestinationDto, type InviteDto } from '@studio/shared';
 import { Button, Checkbox, Dialog, EmptyState, IconButton, Select, Spinner, TextField } from '@studio/ui';
 import { Room, Track } from 'livekit-client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { renderSVG } from 'uqr';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useLoad, useToast } from '../lib/app-context';
@@ -40,6 +41,8 @@ export function InviteDialog({ broadcastId, open, onClose }: { broadcastId: stri
     toast.show('Invite link copied');
   };
   const share = () => invite && navigator.share?.({ title: 'Join my live stream', url: invite.url }).catch(() => undefined);
+  // A guest on a phone can scan this from the host's screen instead of being sent the link.
+  const qr = useMemo(() => invite && `data:image/svg+xml;utf8,${encodeURIComponent(renderSVG(invite.url, { border: 2 }))}`, [invite]);
 
   return (
     <Dialog
@@ -54,11 +57,17 @@ export function InviteDialog({ broadcastId, open, onClose }: { broadcastId: stri
         backstage until you add them to the stage. The link works for 7 days.
       </p>
       {invite ? (
-        <div className="row">
-          <TextField label="Invite link" value={invite.url} onValue={() => undefined} mono data-testid="invite-url" />
-          <IconButton icon="content_copy" label="Copy link" variant="tonal" onClick={() => void copy()} />
-          {'share' in navigator && <IconButton icon="share" label="Share" onClick={share} />}
-        </div>
+        <>
+          <div className="row">
+            <TextField label="Invite link" value={invite.url} onValue={() => undefined} mono data-testid="invite-url" />
+            <IconButton icon="content_copy" label="Copy link" variant="tonal" onClick={() => void copy()} />
+            {'share' in navigator && <IconButton icon="share" label="Share" onClick={share} />}
+          </div>
+          <figure className="invite-qr">
+            <img src={qr!} alt="QR code for the invite link" width={200} height={200} data-testid="invite-qr" />
+            <figcaption className="body-small muted">Scan with a phone camera to join</figcaption>
+          </figure>
+        </>
       ) : (
         <div className="center"><Spinner /></div>
       )}

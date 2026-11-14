@@ -16,6 +16,8 @@ import type {
   StudioSession,
   UpdateBroadcastInput,
   UserDto,
+  GenerateQuizInput,
+  GeneratedQuiz,
 } from '@studio/shared';
 
 export class ApiRequestError extends Error {
@@ -73,6 +75,7 @@ export const api = {
   muteParticipant: (id: string, identity: string, trackSid: string) =>
     post(`/api/broadcasts/${id}/participants/${encodeURIComponent(identity)}/mute`, { trackSid }),
   uploadAsset: (id: string, file: Blob) => post<{ url: string }>(`/api/broadcasts/${id}/assets`, file),
+  generateQuiz: (id: string, input: GenerateQuizInput) => post<GeneratedQuiz>(`/api/broadcasts/${id}/quiz`, input),
 
   goLive: (id: string) => post<GoLiveResult>(`/api/broadcasts/${id}/live`),
   endBroadcast: (id: string) => post<{ ok: true }>(`/api/broadcasts/${id}/end`),

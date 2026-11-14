@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { platformIdSchema } from './platforms';
 import type { Rundown } from './rundown';
-import { sceneSchema, templateIdSchema } from './scene';
+import { sceneSchema, templateIdSchema, type Quiz } from './scene';
 
 // ---------- Auth ----------
 
@@ -101,6 +101,21 @@ export interface RecordingDto {
 // ---------- Studio ----------
 
 export const updateSceneSchema = z.object({ scene: sceneSchema });
+
+/** Asks the AI for quiz questions about what was said in class. */
+export const QUIZ_LEVELS = ['easy', 'mixed', 'hard'] as const;
+export const generateQuizSchema = z.object({
+  /** Enough words to ask about: a minute or so of teaching. */
+  transcript: z.string().trim().min(80, 'The transcript is too short to ask questions about yet').max(60_000),
+  count: z.number().int().min(1).max(10).default(5),
+  level: z.enum(QUIZ_LEVELS).default('mixed'),
+});
+export type GenerateQuizInput = z.input<typeof generateQuizSchema>;
+export interface GeneratedQuiz {
+  questions: Quiz[];
+  /** The model that wrote them. */
+  model: string;
+}
 
 export const joinInviteSchema = z.object({ name: z.string().trim().min(1).max(40) });
 

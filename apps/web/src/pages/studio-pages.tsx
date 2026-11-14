@@ -40,7 +40,7 @@ export function HostStudioPage() {
   return <StudioRoom session={session.data} join={join} onExit={() => navigate('/app')} />;
 }
 
-/** /join/:token, where a guest lands from an invite link. */
+/** /j/:token (and the older /join/:token), where a guest lands from an invite link. */
 export function GuestJoinPage() {
   const { token = '' } = useParams();
   const toast = useToast();

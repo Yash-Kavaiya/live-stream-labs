@@ -1,0 +1,26 @@
+import { expect, test, type Page } from '@playwright/test';
+const field = (page: Page, id: string) => page.getByTestId(id).locator('input, textarea').first();
+test('edit a name banner while it shows', async ({ page }) => {
+  const stamp = Date.now();
+  await page.goto('/signup');
+  await field(page, 'name').fill('Ed Editor');
+  await field(page, 'email').fill(`edit-${stamp}@example.com`);
+  await field(page, 'password').fill('correct horse battery');
+  await page.getByTestId('submit').click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByTestId('new-broadcast').click();
+  await field(page, 'broadcast-title').fill('Banner edit');
+  await page.getByTestId('create-broadcast-submit').click();
+  await page.getByTestId('enter-studio').click();
+  await expect(page.getByTestId('studio')).toHaveAttribute('data-status', 'connected');
+  await page.getByTestId('tab-banners').click();
+  await page.getByTestId('preset-Guest').click();
+  await expect(page.getByTestId('banner-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('banner-edit').click();
+  await field(page, 'banner-edit-text').fill('Priya Shah');
+  await field(page, 'banner-edit-subtitle').fill('CTO, Acme');
+  await page.getByTestId('banner-edit-save').click();
+  await expect(page.getByTestId('banner-toggle')).toContainText('Priya Shah');
+  await expect(page.getByTestId('banner-toggle')).toContainText('CTO, Acme');
+  await expect(page.getByTestId('banner-toggle')).toHaveAttribute('aria-pressed', 'true');
+});

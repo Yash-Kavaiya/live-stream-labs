@@ -26,13 +26,13 @@ export const TEMPLATES: Record<TemplateId, TemplateInfo> = {
     accent: '#D93025',
     backdrop: ['#0B1F47', '#040A18'],
   },
-  cricket: {
-    id: 'cricket',
-    name: 'Cricket',
-    description: 'Ball-by-ball scoring with a score strip or a full match dashboard.',
-    // Team India: blue with saffron.
-    accent: '#FF9933',
-    backdrop: ['#0B3D91', '#041A44'],
+  classroom: {
+    id: 'classroom',
+    name: 'Classroom',
+    description: 'Lecture, slides, whiteboard and quiz scenes, with a lesson plan that shows where the class is.',
+    // Chalk yellow on a chalkboard green.
+    accent: '#FBBC04',
+    backdrop: ['#1B4332', '#081C15'],
   },
   watchparty: {
     id: 'watchparty',

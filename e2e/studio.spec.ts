@@ -78,7 +78,7 @@ test('host and guest go live to two destinations, and the stream is recorded', a
 
   // --- Invite a guest, who joins from a separate browser profile without an account ---
   await page.getByTestId('invite').click();
-  await expect(field(page, 'invite-url')).toHaveValue(/\/join\//);
+  await expect(field(page, 'invite-url')).toHaveValue(/\/j\//);
   const inviteUrl = await field(page, 'invite-url').inputValue();
   await page.keyboard.press('Escape');
 
@@ -117,19 +117,25 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await expect(page.getByTestId('news-interview')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('layout-spotlight')).toHaveCount(0);
 
-  // Cricket: score two balls and read the result back.
+  // Classroom: a lesson plan to step through, then a quiz with its answer shown.
   await page.getByTestId('tab-scenes').click();
-  await page.getByTestId('template-cricket').click();
+  await page.getByTestId('template-classroom').click();
   await page.getByTestId('tab-template').click();
-  // A new cricket scene follows a live match; this test scores by hand.
-  await page.getByTestId('cricket-source-manual').click();
-  // The live feed may already have filled in a finished match: start a fresh innings.
-  await page.getByTestId('cricket-reset').click();
-  await page.getByTestId('ball-4').click();
-  await page.getByTestId('ball-W').click();
-  await expect(page.getByTestId('cricket-score')).toContainText('4/1');
-  await page.getByTestId('cricket-dashboard').click();
-  await expect(page.getByTestId('cricket-dashboard')).toHaveAttribute('aria-pressed', 'true');
+  await field(page, 'class-agenda').fill('Warm-up\nNew idea\nPractice');
+  await expect(page.getByTestId('class-step')).toContainText('1 of 3: Warm-up');
+  await page.getByTestId('class-next').click();
+  await expect(page.getByTestId('class-step')).toContainText('2 of 3: New idea');
+  await page.getByTestId('class-quiz').click();
+  await expect(page.getByTestId('class-quiz')).toHaveAttribute('aria-pressed', 'true');
+  // Class scenes place the cameras themselves, so the layout picker steps aside.
+  await expect(page.getByTestId('layout-spotlight')).toHaveCount(0);
+  await field(page, 'quiz-question').fill('What is 2 + 2?');
+  await field(page, 'quiz-option-A').fill('3');
+  await field(page, 'quiz-option-B').fill('4');
+  await expect(page.getByTestId('quiz-reveal')).toBeDisabled();
+  await page.getByTestId('quiz-answer-B').click();
+  await page.getByTestId('quiz-reveal').click();
+  await expect(page.getByTestId('quiz-reveal')).toContainText('Hide answer');
 
   // Back on the clean look the host can override the layout by hand.
   await page.getByTestId('tab-scenes').click();
@@ -148,6 +154,12 @@ test('host and guest go live to two destinations, and the stream is recorded', a
   await field(page, 'banner-text').fill('Welcome to the show');
   await page.getByTestId('banner-add').click();
   await page.getByTestId('banner-toggle').click();
+  await expect(page.getByTestId('banner-toggle')).toHaveAttribute('aria-pressed', 'true');
+  // Edit its wording while it is showing; it stays on screen.
+  await page.getByTestId('banner-edit').click();
+  await field(page, 'banner-edit-text').fill('Welcome back');
+  await page.getByTestId('banner-edit-save').click();
+  await expect(page.getByTestId('banner-toggle')).toContainText('Welcome back');
   await expect(page.getByTestId('banner-toggle')).toHaveAttribute('aria-pressed', 'true');
 
   await page.screenshot({ path: 'test-results/studio-stage.png' });

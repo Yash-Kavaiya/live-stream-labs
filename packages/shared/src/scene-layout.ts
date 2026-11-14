@@ -1,5 +1,5 @@
 import { ASPECT, computeLayout, PROGRAM_SIZE, tile, type Size, type Tile } from './layout';
-import type { CricketView, NewsView, Scene } from './scene';
+import type { ClassView, NewsView, Scene } from './scene';
 
 export interface Rect {
   x: number;
@@ -87,64 +87,73 @@ export function computeNewsLayout(view: NewsView, ids: string[], canvas: Size = 
   }
 }
 
-// ---------- Cricket ----------
+// ---------- Classroom ----------
 
-/** Height of the score strip in the match view. */
-export const CRICKET_STRIP = 17;
-/** Share of the frame width the dashboard gives to cameras. */
-const CRICKET_CAMERA_COLUMN = 0.27;
+/** Height kept free at the top for the lesson header and at the bottom for the lesson plan strip. */
+export const CLASS_TOP = 11;
+export const CLASS_BOTTOM = 9;
+/** Share of the safe width that the side column takes. */
+const CLASS_COLUMN = 0.27;
 
-/** Share of the frame width the split view gives to its score panel. */
-const CRICKET_SPLIT_PANEL = 0.36;
-
-/** The area of the dashboard that holds the scorecard (everything left of the camera column). */
-export function cricketDashboardArea(canvas: Size = PROGRAM_SIZE, hasCameras = true): Rect {
+/** The part of the frame that video and panels may use in a classroom scene. */
+export function classSafeArea(canvas: Size = PROGRAM_SIZE): Rect {
   const u = unit(canvas);
-  const cameras = hasCameras ? canvas.width * CRICKET_CAMERA_COLUMN + 2 * u : 0;
-  return { x: 3 * u, y: 3 * u, width: canvas.width - 6 * u - cameras, height: canvas.height - 6 * u };
+  return { x: 3 * u, y: CLASS_TOP * u, width: canvas.width - 6 * u, height: canvas.height - (CLASS_TOP + CLASS_BOTTOM) * u };
 }
 
-/** The score panel of the split view, down the right-hand side. */
-export function cricketSplitPanel(canvas: Size = PROGRAM_SIZE): Rect {
-  const u = unit(canvas);
-  const width = canvas.width * CRICKET_SPLIT_PANEL;
-  return { x: canvas.width - width - 3 * u, y: 3 * u, width, height: canvas.height - 6 * u };
+/** The column down the right: cameras beside the slides, the board and the quiz; the plan in a lecture. */
+export function classSideColumn(canvas: Size = PROGRAM_SIZE): Rect {
+  const safe = classSafeArea(canvas);
+  const width = safe.width * CLASS_COLUMN;
+  return { x: safe.x + safe.width - width, y: safe.y, width, height: safe.height };
 }
 
-/** True for the views that place the cameras themselves, so the layout picker does not apply. */
-export function cricketOwnsLayout(view: CricketView): boolean {
-  return view === 'split' || view === 'dashboard' || view === 'card';
+/** The big area left of the side column, or the whole safe area when no column is needed. */
+export function classMainArea(canvas: Size = PROGRAM_SIZE, withColumn = true): Rect {
+  const safe = classSafeArea(canvas);
+  if (!withColumn) return safe;
+  return { ...safe, width: classSideColumn(canvas).x - 2 * unit(canvas) - safe.x };
 }
 
-export function computeCricketLayout(scene: Scene, ids: string[], canvas: Size = PROGRAM_SIZE): Tile[] {
-  const u = unit(canvas);
-  if (scene.cricket.view === 'match') {
-    // The usual layout, in the space above the score strip.
-    return computeLayout(scene.layout, ids, { width: canvas.width, height: canvas.height - CRICKET_STRIP * u }, scene.style);
-  }
-  // The score box sits over the corner of the video, so the cameras keep the whole frame.
-  if (scene.cricket.view === 'bug') return computeLayout(scene.layout, ids, canvas, scene.style);
+/** The largest 16:9 tile that fits in `rect`, centred. */
+function fitIn(id: string, rect: Rect, radius: number): Tile {
+  const width = Math.min(rect.width, rect.height * ASPECT);
+  const height = width / ASPECT;
+  return tile(id, rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height, radius);
+}
+
+/** `hasDeck`: a slide deck is loaded, so in the slides view the deck, not a source, takes the big slot. */
+export function computeClassLayout(view: ClassView, ids: string[], canvas: Size = PROGRAM_SIZE, hasDeck = false): Tile[] {
   if (ids.length === 0) return [];
-  if (scene.cricket.view === 'split') {
-    // Cameras share the space left of the score panel: one fills it, more are stacked.
-    const panel = cricketSplitPanel(canvas);
-    const area = { x: 3 * u, y: 3 * u, width: panel.x - 5 * u, height: canvas.height - 6 * u };
-    if (ids.length === 1) return [{ ...tile(ids[0]!, area.x, area.y, area.width, area.height, 1.4 * u), fit: 'cover' as const }];
-    return computeLayout('grid', ids, { width: area.width, height: area.height }).map((t) => ({
-      ...t,
-      x: t.x + Math.round(area.x),
-      y: t.y + Math.round(area.y),
-      radius: 1.4 * u,
-    }));
+  const u = unit(canvas);
+  const gap = 2 * u;
+  const radius = 1.4 * u;
+  const column = classSideColumn(canvas);
+
+  switch (view) {
+    case 'lecture': {
+      const [teacher, ...rest] = ids;
+      const main = fitIn(teacher!, classMainArea(canvas), radius);
+      return rest.length ? [main, ...stackIn(column, rest, gap, radius)] : [main];
+    }
+    case 'slides': {
+      if (hasDeck) return stackIn(column, ids, gap, radius);
+      // Shared content takes the big slot wherever it is on stage; cameras go to the column.
+      const main = ids.find((id) => !id.startsWith('cam:')) ?? ids[0]!;
+      const rest = ids.filter((id) => id !== main);
+      const big = fitIn(main, classMainArea(canvas, rest.length > 0), radius);
+      return rest.length ? [big, ...stackIn(column, rest, gap, radius)] : [big];
+    }
+    case 'board':
+    case 'quiz':
+      // The board or the quiz owns the main area.
+      return stackIn(column, ids, gap, radius);
   }
-  const width = canvas.width * CRICKET_CAMERA_COLUMN;
-  const column = { x: canvas.width - width - 3 * u, y: 3 * u, width, height: canvas.height - 6 * u };
-  return stackIn(column, ids, 2 * u, 1.4 * u);
 }
 
 /** Where every on-stage source goes, taking the template into account. */
 export function computeSceneLayout(scene: Scene, ids: string[], canvas: Size = PROGRAM_SIZE): Tile[] {
   if (scene.template === 'newsroom') return computeNewsLayout(scene.news.view, ids, canvas);
-  if (scene.template === 'cricket') return computeCricketLayout(scene, ids, canvas);
+  if (scene.template === 'classroom') return computeClassLayout(scene.classroom.view, ids, canvas, scene.classroom.slides.length > 0);
   return computeLayout(scene.layout, ids, canvas, scene.style);
 }

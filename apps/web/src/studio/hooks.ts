@@ -8,7 +8,7 @@ import {
   type Scene,
 } from '@studio/shared';
 import { Track, type Room } from 'livekit-client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { api } from '../lib/api';
 import { useToast } from '../lib/app-context';
 import { CLIP_AUDIO, CLIP_VIDEO, type StudioSource } from './sources';
@@ -142,6 +142,21 @@ export function useElapsed(since: number | null): number {
     return () => clearInterval(timer);
   }, [since]);
   return since === null ? 0 : (now - since) / 1000;
+}
+
+/** Whether `ref` is the full-screen element, and a toggle for it. Esc leaves through the browser. */
+export function useFullscreen(ref: RefObject<HTMLElement | null>) {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    const sync = () => setActive(document.fullscreenElement !== null && document.fullscreenElement === ref.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, [ref]);
+  const toggle = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void ref.current?.requestFullscreen().catch(() => {});
+  }, [ref]);
+  return { active, toggle, supported: document.fullscreenEnabled };
 }
 
 const isPerson = (id: string) => parseSourceId(id).kind === 'cam';

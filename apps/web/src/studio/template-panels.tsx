@@ -1,27 +1,20 @@
 import {
-  BALLS,
-  CRICKET_MOMENTS,
-  cricketStats,
-  DEFAULT_CRICKET,
-  inningsOver,
-  MOMENT_HEADLINES,
+  agendaItems,
+  CLASS_VIEWS,
+  DEFAULT_QUIZ,
   NEWS_VIEWS,
-  recordBall,
-  CRICKET_VIEWS,
-  type Ball,
-  type Cricket,
-  type CricketMoment,
-  type CricketView,
+  QUIZ_OPTIONS,
+  type Classroom,
+  type ClassView,
   type News,
   type NewsView,
+  type Quiz,
   type Scene,
   type TemplateId,
 } from '@studio/shared';
-import { Button, Icon, Select, Switch, TextField } from '@studio/ui';
-import { useEffect, useState } from 'react';
-import { fetchMatches, pickDefaultMatch, type MatchRef } from '../lib/cricket-feed';
+import { Button, Icon, IconButton, TextField } from '@studio/ui';
+import { openClassWindow } from './class-ink';
 import { CleanControls } from './clean-controls';
-import { momentCelebration, withInnings } from './live-cricket';
 import { PartyPanel } from './party/party-panel';
 import type { PartyControls } from './party/use-party';
 import { RundownPanel } from './rundown/rundown-panel';
@@ -31,12 +24,6 @@ type SceneUpdater = (change: (scene: Scene) => Scene) => void;
 interface Props {
   scene: Scene;
   update: SceneUpdater;
-}
-
-/** How the live score feed is doing, for the cricket page to show. */
-export interface LiveScoreState {
-  updatedAt: number | null;
-  error: string | null;
 }
 
 // ---------- News room ----------
@@ -88,259 +75,212 @@ function NewsControls({ scene, update }: Props) {
         supportingText="Shown beside the presenter in the Anchor scene."
       />
       <p className="body-small muted">
-        A banner from the Banners tab replaces the headline while it is showing; a ticker runs along
-        the bottom strip.
+        A lower third from the Banners tab replaces the headline while it is showing. Name tags,
+        social handles and calls to action sit above the headline, and a ticker runs along the
+        bottom strip.
       </p>
     </section>
   );
 }
 
-// ---------- Cricket ----------
+// ---------- Classroom ----------
 
-const BALL_LABELS: Record<string, string> = { W: 'W', wd: 'Wd', nb: 'Nb' };
-
-const CRICKET_VIEW_INFO: Record<CricketView, { label: string; icon: string; hint: string }> = {
-  match: { label: 'Strip', icon: 'videocam', hint: 'Cameras in your usual layout, with a score strip along the bottom.' },
-  bug: { label: 'Corner', icon: 'picture_in_picture', hint: 'Cameras fill the frame; a small score box sits in the top-left corner.' },
-  split: { label: 'Split', icon: 'vertical_split', hint: 'Cameras on the left, a tall score panel on the right.' },
-  dashboard: { label: 'Board', icon: 'scoreboard', hint: 'The full scoreboard, with cameras in a column at the side.' },
-  card: { label: 'Card', icon: 'table_rows', hint: 'The batting card and the bowlers, with cameras in a column at the side.' },
+const CLASS_VIEW_INFO: Record<ClassView, { label: string; icon: string; hint: string }> = {
+  lecture: { label: 'Lecture', icon: 'co_present', hint: 'You on camera with the lesson plan beside you. Guests on stage take the side column.' },
+  slides: { label: 'Slides', icon: 'slideshow', hint: 'Your slide deck (or a shared screen, clip or image) fills the frame; cameras sit in a column at the side.' },
+  board: { label: 'Board', icon: 'edit_note', hint: 'The whiteboard you draw on in the whiteboard window, with cameras in a column at the side.' },
+  quiz: { label: 'Quiz', icon: 'quiz', hint: 'A multiple-choice question. Reveal the answer once the class has had a go.' },
 };
 
-/** Chooses the real match the scoreboard follows. The list is fetched when this first shows. */
-function LiveMatchPicker({ cricket, set, liveScore }: { cricket: Cricket; set(patch: Partial<Cricket>): void; liveScore?: LiveScoreState }) {
-  const [matches, setMatches] = useState<MatchRef[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  const chosen = cricket.liveMatch;
+const LETTERS = ['A', 'B', 'C', 'D'];
 
-  useEffect(() => {
-    const abort = new AbortController();
-    fetchMatches(abort.signal).then(
-      (list) => {
-        setMatches(list);
-        // Nothing chosen yet: follow the live India match if there is one.
-        const first = pickDefaultMatch(list);
-        if (!chosen && first) set({ liveMatch: { league: first.league, event: first.event } });
-      },
-      () => !abort.signal.aborted && setFailed(true),
-    );
-    return () => abort.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+/** The lesson plan, and stepping through it while teaching. */
+function LessonControls({ classroom, set }: { classroom: Classroom; set(patch: Partial<Classroom>): void }) {
+  const items = agendaItems(classroom);
+  const step = Math.max(0, Math.min(classroom.step, items.length - 1));
 
-  if (failed) return <p className="body-medium" style={{ color: 'var(--md-sys-color-error)' }}>The match list could not be loaded. Check the internet connection and reopen this tab.</p>;
-  if (!matches) return <p className="body-medium muted">Loading matches…</p>;
-  if (matches.length === 0) return <p className="body-medium muted">No matches are listed right now.</p>;
-
-  const key = (m: { league: string; event: string }) => `${m.league}:${m.event}`;
-  const value = chosen && matches.some((m) => key(m) === key(chosen)) ? key(chosen) : key(matches[0]!);
   return (
     <>
-      <Select
-        label="Match"
-        value={value}
-        floatingMenu
-        onValue={(next) => {
-          const [league = '', event = ''] = next.split(':');
-          set({ liveMatch: { league, event } });
-        }}
-        options={matches.map((m) => ({ value: key(m), label: `${m.state === 'in' ? '● ' : ''}${m.title} · ${m.status}` }))}
-        data-testid="cricket-live-match"
+      <div className="field-pair">
+        <TextField label="Course" value={classroom.course} onValue={(course) => set({ course })} maxLength={32} placeholder="Physics 101" />
+        <TextField label="Lesson" value={classroom.lesson} onValue={(lesson) => set({ lesson })} maxLength={80} placeholder="Newton’s laws" data-testid="class-lesson" />
+      </div>
+      <TextField
+        label="Lesson plan (one part per line)"
+        type="textarea"
+        rows={4}
+        value={classroom.agenda}
+        onValue={(agenda) => set({ agenda })}
+        maxLength={400}
+        supportingText="Shown along the bottom of every scene, with the part you are on lit up."
+        data-testid="class-agenda"
       />
-      <p className="body-small muted" data-testid="cricket-live-state">
-        {liveScore?.error
-          ? `The score feed could not be reached; the last score stays on screen. (${liveScore.error})`
-          : liveScore?.updatedAt
-            ? 'Following the match. The score refreshes every 5 seconds.'
-            : 'Connecting to the score feed…'}
-      </p>
+      {items.length > 0 && (
+        <div className="row" style={{ alignItems: 'center' }}>
+          <Button variant="tonal" icon="chevron_left" disabled={step === 0} onClick={() => set({ step: step - 1 })} data-testid="class-prev">
+            Back
+          </Button>
+          <span className="body-medium grow truncate" style={{ textAlign: 'center' }} data-testid="class-step">
+            {step + 1} of {items.length}: {items[step]}
+          </span>
+          <Button variant="tonal" icon="chevron_right" disabled={step >= items.length - 1} onClick={() => set({ step: step + 1 })} data-testid="class-next">
+            Next
+          </Button>
+        </div>
+      )}
     </>
   );
 }
 
-const MOMENT_BUTTONS: Record<Exclude<CricketMoment, 'custom'>, string> = { four: '4', six: '6', wicket: 'W', fifty: '50', hundred: '100', freehit: 'Free hit' };
-const BANNER_PRESETS = ['HAT-TRICK!', 'WHAT A CATCH!', 'DRS REVIEW', 'MAIDEN OVER'];
-const BANNER_EMOJI = ['📣', '🔥', '🏏', '🙌', '😱', '🎯'];
-
-/** Boundaries, wickets and milestones as cartoons over the frame, and a banner with the host's own words. */
-function CricketMoments({ scene, update }: Props) {
-  const [text, setText] = useState('');
-  const [emoji, setEmoji] = useState(BANNER_EMOJI[0]!);
-  const play = (moment: CricketMoment, detail = '', headline = '', picture = '') =>
-    update((s) => ({ ...s, celebration: momentCelebration(moment, detail, headline, picture) }));
-  const banner = (headline: string) => {
-    if (headline.trim()) play('custom', '', headline.trim(), emoji);
-  };
+/** The question, its options, which one is right, and showing that on screen. */
+function QuizControls({ quiz, setQuiz, celebrate }: { quiz: Quiz; setQuiz(patch: Partial<Quiz>): void; celebrate(): void }) {
+  const canReveal = quiz.answer !== null && !!quiz.options[quiz.answer]?.trim();
+  const setOption = (index: number, text: string) => setQuiz({ options: quiz.options.map((o, i) => (i === index ? text : o)), revealed: false });
 
   return (
     <>
-      <h3 className="title-small">Moments</h3>
-      <div className="moment-pad" role="group" aria-label="Play a moment">
-        {CRICKET_MOMENTS.filter((moment) => moment !== 'custom').map((moment) => (
-          <button key={moment} type="button" className={`moment-button ${moment}`} title={MOMENT_HEADLINES[moment]} data-testid={`moment-${moment}`} onClick={() => play(moment)}>
-            {MOMENT_BUTTONS[moment]}
-          </button>
-        ))}
-      </div>
-      <Switch
-        label="Play moments automatically from the score"
-        selected={scene.cricket.autoMoments}
-        onChange={(autoMoments) => update((s) => ({ ...s, cricket: { ...s.cricket, autoMoments } }))}
-        data-testid="cricket-auto-moments"
+      <h3 className="title-small">Quiz</h3>
+      <TextField
+        label="Question"
+        type="textarea"
+        rows={2}
+        value={quiz.question}
+        onValue={(question) => setQuiz({ question, revealed: false })}
+        maxLength={160}
+        data-testid="quiz-question"
       />
-
-      <span className="body-medium">Your own banner</span>
-      <div className="timer-row" role="group" aria-label="Ready-made banners">
-        {BANNER_PRESETS.map((preset) => (
-          <button key={preset} type="button" className="timer-chip" data-testid="moment-preset" onClick={() => banner(preset)}>
-            {preset}
+      <div className="field-pair">
+        {Array.from({ length: QUIZ_OPTIONS }, (_, i) => (
+          <TextField key={i} label={`Option ${LETTERS[i]}`} value={quiz.options[i] ?? ''} onValue={(text) => setOption(i, text)} maxLength={60} data-testid={`quiz-option-${LETTERS[i]}`} />
+        ))}
+      </div>
+      <span className="body-medium">Right answer</span>
+      <div className="segmented" role="group" aria-label="Right answer" style={{ display: 'flex' }}>
+        {LETTERS.map((letter, i) => (
+          <button
+            key={letter}
+            type="button"
+            className="grow"
+            style={{ justifyContent: 'center' }}
+            aria-pressed={quiz.answer === i}
+            data-testid={`quiz-answer-${letter}`}
+            onClick={() => setQuiz({ answer: quiz.answer === i ? null : i, revealed: false })}
+          >
+            {letter}
           </button>
         ))}
       </div>
-      <div className="reaction-row six" role="group" aria-label="Picture on the banner">
-        {BANNER_EMOJI.map((choice) => (
-          <button key={choice} type="button" className="reaction-button" aria-label={`Use ${choice}`} aria-pressed={emoji === choice} onClick={() => setEmoji(choice)}>
-            {choice}
-          </button>
-        ))}
-      </div>
-      <TextField label="Banner text" value={text} onValue={setText} maxLength={40} placeholder="WHAT A SHOT!" onEnter={() => banner(text)} data-testid="moment-text" />
-      <div>
-        <Button variant="tonal" icon="campaign" disabled={!text.trim()} onClick={() => banner(text)} data-testid="moment-show">
-          Show banner
+      <div className="row wrap">
+        {quiz.revealed ? (
+          <Button variant="tonal" icon="visibility_off" onClick={() => setQuiz({ revealed: false })} data-testid="quiz-reveal">
+            Hide answer
+          </Button>
+        ) : (
+          <Button
+            variant="tonal"
+            icon="visibility"
+            disabled={!canReveal}
+            onClick={() => {
+              setQuiz({ revealed: true });
+              celebrate();
+            }}
+            data-testid="quiz-reveal"
+          >
+            Reveal answer
+          </Button>
+        )}
+        <Button variant="text" danger icon="restart_alt" onClick={() => setQuiz(DEFAULT_QUIZ)} data-testid="quiz-clear">
+          New question
         </Button>
       </div>
-      <p className="body-small muted">A moment covers the middle of the frame for about four seconds, on every cricket layout.</p>
+      <p className="body-small muted">Empty options are left off the screen. Pick the right answer before revealing it.</p>
     </>
   );
 }
 
-function CricketControls({ scene, update, liveScore }: Props & { liveScore?: LiveScoreState }) {
-  const c = scene.cricket;
-  const live = c.source === 'live';
-  const stats = cricketStats(c);
-  const set = (patch: Partial<Cricket>) => update((s) => ({ ...s, cricket: { ...s.cricket, ...patch } }));
-  const score = (ball: Ball) => update((s) => withInnings(s, recordBall(s.cricket, ball)));
-  const setBatter = (index: 0 | 1, name: string) =>
-    update((s) => {
-      const batters: Cricket['batters'] = [{ ...s.cricket.batters[0] }, { ...s.cricket.batters[1] }];
-      batters[index].name = name;
-      return { ...s, cricket: { ...s.cricket, batters } };
-    });
-  // Whole numbers only; an empty field means "no target".
-  const number = (text: string, max: number) => Math.min(max, Math.max(0, Number.parseInt(text.replace(/\D/g, ''), 10) || 0));
-
-  const startChase = () =>
+function ClassroomControls({ scene, update, broadcastId }: Props & { broadcastId: string }) {
+  const c = scene.classroom;
+  const set = (patch: Partial<Classroom>) => update((s) => ({ ...s, classroom: { ...s.classroom, ...patch } }));
+  const setQuiz = (patch: Partial<Quiz>) => update((s) => ({ ...s, classroom: { ...s.classroom, quiz: { ...s.classroom.quiz, ...patch } } }));
+  const celebrate = () =>
     update((s) => ({
       ...s,
-      cricket: {
-        ...DEFAULT_CRICKET,
-        source: 'manual',
-        view: s.cricket.view,
-        title: s.cricket.title,
-        oversLimit: s.cricket.oversLimit,
-        autoMoments: s.cricket.autoMoments,
-        batting: s.cricket.bowling,
-        bowling: s.cricket.batting,
-        target: s.cricket.runs + 1,
-      },
+      celebration: { id: Math.random().toString(36).slice(2, 12), kind: 'reaction', emoji: '🎉', text: '', at: Date.now() },
     }));
 
   return (
     <section className="col">
-      <h3 className="title-small">Cricket match</h3>
-      <div className="screen-grid five" role="group" aria-label="Cricket layout">
-        {CRICKET_VIEWS.map((view) => (
-          <button key={view} type="button" className="screen-button" aria-pressed={c.view === view} data-testid={`cricket-${view}`} onClick={() => set({ view })}>
-            <Icon name={CRICKET_VIEW_INFO[view].icon} />
-            <span className="label-medium">{CRICKET_VIEW_INFO[view].label}</span>
+      <h3 className="title-small">Class scenes</h3>
+      <div className="screen-grid" role="group" aria-label="Class scene">
+        {CLASS_VIEWS.map((view) => (
+          <button key={view} type="button" className="screen-button" aria-pressed={c.view === view} data-testid={`class-${view}`} onClick={() => set({ view })}>
+            <Icon name={CLASS_VIEW_INFO[view].icon} />
+            <span className="label-medium">{CLASS_VIEW_INFO[view].label}</span>
           </button>
         ))}
       </div>
-      <p className="body-small muted">{CRICKET_VIEW_INFO[c.view].hint}</p>
+      <p className="body-small muted">{CLASS_VIEW_INFO[c.view].hint}</p>
 
-      <h3 className="title-small">Score</h3>
-      <div className="segmented" role="group" aria-label="Where the score comes from" style={{ display: 'flex' }}>
-        <button type="button" className="grow" style={{ justifyContent: 'center' }} aria-pressed={live} data-testid="cricket-source-live" onClick={() => set({ source: 'live' })}>
-          <Icon name="sensors" /> Live match
-        </button>
-        <button type="button" className="grow" style={{ justifyContent: 'center' }} aria-pressed={!live} data-testid="cricket-source-manual" onClick={() => set({ source: 'manual', status: '', other: '', card: [], attack: [], overs: [], partnership: null, projected: null, colors: null })}>
-          <Icon name="touch_app" /> Score by hand
-        </button>
-      </div>
-      {live && <LiveMatchPicker cricket={c} set={set} liveScore={liveScore} />}
+      <h3 className="title-small">Lesson</h3>
+      <LessonControls classroom={c} set={set} />
 
-      <div className="score-readout" data-testid="cricket-score">
-        <span className="headline">
-          {c.batting} {c.runs}/{c.wickets}
-        </span>
-        <span className="body-medium muted">
-          {stats.overs} ov · CRR {stats.runRate}
-          {(live && c.status) || stats.summary ? ` · ${(live && c.status) || stats.summary}` : ''}
-        </span>
-      </div>
-
-      {!live && (
-        <>
-
-      <div className="ball-pad" role="group" aria-label="Score a ball">
-        {BALLS.map((ball) => (
-          <button
-            key={ball}
-            type="button"
-            className={`ball-button ${ball === 'W' ? 'wicket' : ball === 4 || ball === 6 ? 'boundary' : ''}`}
-            disabled={inningsOver(c)}
-            data-testid={`ball-${ball}`}
-            onClick={() => score(ball)}
-          >
-            {BALL_LABELS[String(ball)] ?? ball}
-          </button>
-        ))}
-      </div>
-      <div className="row wrap">
-        <Button variant="tonal" icon="swap_horiz" onClick={() => set({ striker: c.striker === 0 ? 1 : 0 })}>
-          Swap strike
+      <h3 className="title-small">Slides</h3>
+      <div className="class-launch">
+        <Button icon="slideshow" onClick={() => openClassWindow(broadcastId, 'slides')} data-testid="open-slides">
+          Open slides window
         </Button>
-        <Button variant="tonal" icon="sports_cricket" onClick={() => set({ bowler: { name: 'Bowler', balls: 0, runs: 0, wickets: 0 } })}>
-          New bowler
-        </Button>
-      </div>
-
-      <TextField label="Match title" value={c.title} onValue={(title) => set({ title })} maxLength={40} />
-      <div className="field-pair">
-        <TextField label="Batting" value={c.batting} onValue={(batting) => set({ batting })} maxLength={24} />
-        <TextField label="Bowling" value={c.bowling} onValue={(bowling) => set({ bowling })} maxLength={24} />
-      </div>
-      <div className="field-pair">
-        <TextField label={`Batter${c.striker === 0 ? ' (on strike)' : ''}`} value={c.batters[0].name} onValue={(name) => setBatter(0, name)} maxLength={24} />
-        <TextField label={`Batter${c.striker === 1 ? ' (on strike)' : ''}`} value={c.batters[1].name} onValue={(name) => setBatter(1, name)} maxLength={24} />
-      </div>
-      <TextField label="Bowler" value={c.bowler.name} onValue={(name) => set({ bowler: { ...c.bowler, name } })} maxLength={24} />
-      <div className="field-pair">
-        <TextField label="Overs" value={String(c.oversLimit)} onValue={(text) => set({ oversLimit: Math.max(1, number(text, 90)) })} />
-        <TextField
-          label="Target"
-          value={c.target === null ? '' : String(c.target)}
-          onValue={(text) => set({ target: text.trim() ? number(text, 9999) : null })}
-          placeholder="First innings"
-        />
-      </div>
-      <div className="row wrap">
-        <Button variant="outlined" icon="flag" onClick={startChase} data-testid="cricket-chase">
-          Start the chase
-        </Button>
-        <Button variant="text" danger icon="restart_alt" onClick={() => set({ ...DEFAULT_CRICKET, source: 'manual', view: c.view, autoMoments: c.autoMoments })} data-testid="cricket-reset">
-          Reset
-        </Button>
+        {c.slides.length > 0 && (
+          <div className="row" style={{ alignItems: 'center', gap: 4 }}>
+            <IconButton icon="chevron_left" label="Previous slide" disabled={c.slide === 0} onClick={() => set({ slide: c.slide - 1 })} />
+            <span className="body-medium" data-testid="class-slide">
+              Slide {Math.min(c.slide, c.slides.length - 1) + 1} of {c.slides.length}
+            </span>
+            <IconButton icon="chevron_right" label="Next slide" disabled={c.slide >= c.slides.length - 1} onClick={() => set({ slide: c.slide + 1 })} />
+          </div>
+        )}
       </div>
       <p className="body-small muted">
-        Tap a ball to score it. Start the chase swaps the teams and sets the target to one more than
-        this total.
+        {c.slides.length > 0
+          ? 'The Slides scene shows the deck, with cameras in a column at the side. Write on a slide in the slides window.'
+          : 'Upload a PDF or images in the slides window. Without a deck, the Slides scene shows whatever you share on stage.'}
       </p>
-        </>
-      )}
 
-      <CricketMoments scene={scene} update={update} />
+      <h3 className="title-small">Whiteboard</h3>
+      <div className="class-launch">
+        <Button icon="draw" onClick={() => openClassWindow(broadcastId, 'board')} data-testid="open-board">
+          Open whiteboard
+        </Button>
+        <span className="body-medium muted">
+          Page {c.boardPage + 1} of {c.boardPages}
+        </span>
+      </div>
+      <p className="body-small muted">
+        Draw, write and add shapes in the whiteboard window; the Board scene shows it on stream as you draw. Keep the studio
+        open while you use it.
+      </p>
+      <TextField
+        label="Typed notes on the first page"
+        type="textarea"
+        rows={4}
+        value={c.board}
+        onValue={(board) => set({ board })}
+        maxLength={600}
+        supportingText={'One note per line. Start a line with "- " for a bullet.'}
+        data-testid="class-notes"
+      />
+
+      <h3 className="title-small">Quiz with AI</h3>
+      <div className="class-launch">
+        <Button icon="auto_awesome" onClick={() => openClassWindow(broadcastId, 'quiz')} data-testid="open-quiz">
+          Open quiz window
+        </Button>
+        {c.quizBank.length > 0 && <span className="body-medium muted">{c.quizBank.length} questions ready</span>}
+      </div>
+      <p className="body-small muted">
+        Live captions turn what you say into a transcript, and AI writes questions from it. Edit them, then put one on stream at a time.
+      </p>
+
+      <QuizControls quiz={c.quiz} setQuiz={setQuiz} celebrate={celebrate} />
     </section>
   );
 }
@@ -351,12 +291,12 @@ function CricketControls({ scene, update, liveScore }: Props & { liveScore?: Liv
 export const TEMPLATE_PAGES: Record<TemplateId, { label: string; icon: string }> = {
   none: { label: 'Layout', icon: 'view_quilt' },
   newsroom: { label: 'News', icon: 'newspaper' },
-  cricket: { label: 'Cricket', icon: 'sports_cricket' },
+  classroom: { label: 'Class', icon: 'school' },
   watchparty: { label: 'Party', icon: 'celebration' },
 };
 
 /** The page of controls for whichever template is active. The clean look's page is the layout designer. */
-export function TemplatePage(props: Props & { broadcastId: string; liveScore?: LiveScoreState; rundown?: RundownState; party?: PartyControls; stageNames?: string[] }) {
+export function TemplatePage(props: Props & { broadcastId: string; rundown?: RundownState; party?: PartyControls; stageNames?: string[] }) {
   switch (props.scene.template) {
     case 'none':
       return <CleanControls {...props} />;
@@ -367,10 +307,10 @@ export function TemplatePage(props: Props & { broadcastId: string; liveScore?: L
           <NewsControls {...props} />
         </div>
       );
-    case 'cricket':
+    case 'classroom':
       return (
         <div className="panel-scroll col">
-          <CricketControls {...props} />
+          <ClassroomControls {...props} />
         </div>
       );
     case 'watchparty':

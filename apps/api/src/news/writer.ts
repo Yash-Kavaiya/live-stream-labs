@@ -358,7 +358,7 @@ export interface Provider {
   generate: Generate;
 }
 
-function providersFor(config: NewsConfig, fetch: Fetch): Provider[] {
+export function providersFor(config: NewsConfig, fetch: Fetch): Provider[] {
   const list: Provider[] = [];
   if (config.nvidiaKey) {
     list.push({ name: config.model, generate: nvidiaGenerate(fetch, config.nvidiaKey, config.model) });
@@ -373,7 +373,7 @@ export interface Writer {
 }
 
 /** An error's message with anything that looks like a key taken out, safe to show the host. */
-function reasonOf(err: unknown): string {
+export function reasonOf(err: unknown): string {
   const message = err instanceof Error ? err.message : 'The model call failed';
   return clip(oneLine(message).replace(/(nvapi-|AIza|AQ\.)[\w.-]+/g, '[key]'), 160);
 }

@@ -11,6 +11,7 @@ import {
   hideAllBanners,
   removeBanner,
   toggleBanner,
+  updateBanner,
   type Banner,
   DEFAULT_SCENE,
   MAX_ON_STAGE,
@@ -86,6 +87,16 @@ describe('banners', () => {
     const after = removeBanner(shown, 'lower');
     expect(after.banners.map((b) => b.id)).not.toContain('lower');
     expect(activeBanners(after)).toEqual([]);
+  });
+
+  it('edits a banner, keeping it on screen', () => {
+    const shown = toggleBanner(scene, 'guest');
+    const edited = updateBanner(shown, 'guest', { text: '  Priya Shah ', subtitle: 'CTO, Acme' });
+    expect(bannerInSlot(edited, 'bottom')).toEqual({ id: 'guest', text: 'Priya Shah', subtitle: 'CTO, Acme', style: 'name-title' });
+  });
+
+  it('ignores an edit that would leave a banner with no text', () => {
+    expect(updateBanner(scene, 'guest', { text: '   ' })).toBe(scene);
   });
 
   it('still shows a banner saved by the older single-banner field', () => {

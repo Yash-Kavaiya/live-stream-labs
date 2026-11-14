@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { cricketStats, momentFor, oversText, recordBall, type Ball } from './cricket';
 import { PROGRAM_SIZE, type Tile } from './layout';
-import { DEFAULT_AUTO, DEFAULT_CRICKET, DEFAULT_SCENE, NEWS_VIEWS, normalizeScene, type Cricket } from './scene';
-import { CRICKET_STRIP, computeSceneLayout, newsSafeArea, newsSidePanel } from './scene-layout';
+import { agendaItems, CLASS_VIEWS, DEFAULT_AUTO, DEFAULT_CLASSROOM, DEFAULT_SCENE, NEWS_VIEWS, normalizeScene, type ClassView } from './scene';
+import { classMainArea, classSafeArea, classSideColumn, computeSceneLayout, newsSafeArea, newsSidePanel } from './scene-layout';
 import { applyTemplate, formatCountdown, setScreen, setScreenTimer, TEMPLATES } from './templates';
 
 const cams = (n: number) => Array.from({ length: n }, (_, i) => `cam:p${i}`);
-const play = (c: Cricket, balls: Ball[]) => balls.reduce(recordBall, c);
 
 function overlap(a: Tile, b: Tile) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -14,22 +12,36 @@ function overlap(a: Tile, b: Tile) {
 
 describe('templates', () => {
   it('applies the accent colour and a fitting layout', () => {
-    const scene = applyTemplate({ ...DEFAULT_SCENE, stage: ['cam:a', 'cam:b'] }, 'cricket');
-    expect(scene.template).toBe('cricket');
-    expect(scene.brand.color).toBe(TEMPLATES.cricket.accent);
+    const scene = applyTemplate({ ...DEFAULT_SCENE, stage: ['cam:a', 'cam:b'] }, 'classroom');
+    expect(scene.template).toBe('classroom');
+    expect(scene.brand.color).toBe(TEMPLATES.classroom.accent);
     expect(scene.layout).toBe('grid');
   });
 
   it('fills in new fields for a scene saved before they existed', () => {
-    const { template: _t, screen: _s, auto: _a, news: _n, cricket: _c, celebration: _e, style: _y, ...old } = DEFAULT_SCENE;
+    const { template: _t, screen: _s, auto: _a, news: _n, classroom: _c, celebration: _e, style: _y, ...old } = DEFAULT_SCENE;
     const scene = normalizeScene({ ...old, layout: 'pip' });
-    expect(scene).toMatchObject({ layout: 'pip', template: 'none', auto: DEFAULT_AUTO, cricket: DEFAULT_CRICKET });
+    expect(scene).toMatchObject({ layout: 'pip', template: 'none', auto: DEFAULT_AUTO, classroom: DEFAULT_CLASSROOM });
   });
 
   it('maps a removed template to the clean look instead of discarding the scene', () => {
     const scene = normalizeScene({ ...DEFAULT_SCENE, template: 'sports', stage: ['cam:a'], scoreboard: { teamA: 'x' } });
     expect(scene.template).toBe('none');
     expect(scene.stage).toEqual(['cam:a']);
+  });
+
+  it('opens a scene saved with the old cricket template, dropping its moment', () => {
+    const scene = normalizeScene({
+      ...DEFAULT_SCENE,
+      template: 'cricket',
+      stage: ['cam:a'],
+      cricket: { view: 'match', runs: 12 },
+      celebration: { id: 'x', kind: 'moment', emoji: '', text: 'SIX!', at: 1, moment: 'six' },
+    });
+    expect(scene.template).toBe('none');
+    expect(scene.stage).toEqual(['cam:a']);
+    expect(scene.celebration).toBeNull();
+    expect(scene).not.toHaveProperty('cricket');
   });
 
   it('falls back when the stored value is not a scene at all', () => {
@@ -80,135 +92,74 @@ describe('news room layouts', () => {
   });
 });
 
-describe('cricket layouts', () => {
-  const cricket = (view: Cricket['view']) => ({
+describe('classroom layouts', () => {
+  const classroom = (view: ClassView) => ({
     ...DEFAULT_SCENE,
-    template: 'cricket' as const,
-    cricket: { ...DEFAULT_CRICKET, view },
+    template: 'classroom' as const,
+    classroom: { ...DEFAULT_CLASSROOM, view },
   });
+  const safe = classSafeArea();
+  const column = classSideColumn();
 
-  it('match view keeps video above the score strip', () => {
-    const stripTop = PROGRAM_SIZE.height * (1 - CRICKET_STRIP / 100);
-    for (const t of computeSceneLayout(cricket('match'), cams(4))) {
-      expect(t.y + t.height).toBeLessThanOrEqual(stripTop + 1);
+  it.each(CLASS_VIEWS)('%s keeps video clear of the lesson header and the plan strip', (view) => {
+    for (let n = 1; n <= 6; n++) {
+      const tiles = computeSceneLayout(classroom(view), [...cams(n - 1), 'screen:p0']);
+      expect(tiles).toHaveLength(n);
+      for (const t of tiles) {
+        expect(t.y, `${view} n=${n}`).toBeGreaterThanOrEqual(Math.floor(safe.y));
+        expect(t.y + t.height).toBeLessThanOrEqual(Math.ceil(safe.y + safe.height) + 1);
+        expect(t.x + t.width).toBeLessThanOrEqual(PROGRAM_SIZE.width);
+      }
     }
   });
 
-  it('dashboard stacks cameras in a column on the right', () => {
-    const tiles = computeSceneLayout(cricket('dashboard'), cams(3));
-    for (const t of tiles) expect(t.x).toBeGreaterThan(PROGRAM_SIZE.width * 0.65);
+  it('lecture: one teacher leaves the side column free for the plan; guests fill it', () => {
+    const [solo] = computeSceneLayout(classroom('lecture'), cams(1));
+    expect(solo!.x + solo!.width).toBeLessThan(column.x);
+
+    const withGuests = computeSceneLayout(classroom('lecture'), cams(3));
+    expect(withGuests[1]!.x).toBeGreaterThanOrEqual(Math.floor(column.x));
+    expect(overlap(withGuests[1]!, withGuests[2]!)).toBe(false);
+  });
+
+  it('slides: the shared screen takes the big slot even when the camera is listed first', () => {
+    const tiles = computeSceneLayout(classroom('slides'), ['cam:t', 'screen:t']);
+    const screen = tiles.find((t) => t.id === 'screen:t')!;
+    const cam = tiles.find((t) => t.id === 'cam:t')!;
+    expect(screen.width).toBeGreaterThan(cam.width * 2);
+    expect(screen.fit).toBe('contain');
+    expect(cam.x).toBeGreaterThanOrEqual(Math.floor(column.x));
+    expect(overlap(screen, cam)).toBe(false);
+  });
+
+  it('slides: a screen on its own grows to the full height of the safe area', () => {
+    const [screen] = computeSceneLayout(classroom('slides'), ['screen:t']);
+    expect(screen!.height).toBeGreaterThanOrEqual(Math.floor(safe.height) - 1);
+    expect(screen!.x + screen!.width).toBeGreaterThan(classSideColumn().x);
+  });
+
+  it.each(['board', 'quiz'] as const)('%s: every camera sits in the side column, clear of the panel', (view) => {
+    const main = classMainArea();
+    const tiles = computeSceneLayout(classroom(view), cams(3));
+    expect(tiles).toHaveLength(3);
+    for (const t of tiles) expect(t.x).toBeGreaterThanOrEqual(Math.floor(main.x + main.width));
     expect(overlap(tiles[0]!, tiles[1]!)).toBe(false);
   });
 });
 
-describe('cricket scoring', () => {
-  it('adds runs to the team, the striker and the bowler, and rotates strike on odd runs', () => {
-    const c = play(DEFAULT_CRICKET, [1, 4]);
-    expect(c).toMatchObject({ runs: 5, balls: 2, striker: 1 });
-    expect(c.batters[0]).toMatchObject({ runs: 1, balls: 1 });
-    expect(c.batters[1]).toMatchObject({ runs: 4, balls: 1 });
-    expect(c.bowler).toMatchObject({ runs: 5, balls: 2 });
-    expect(c.thisOver).toEqual(['1', '4']);
+describe('lesson plan', () => {
+  it('lists the parts in order, skipping blank lines and trimming spaces', () => {
+    expect(agendaItems({ ...DEFAULT_CLASSROOM, agenda: ' Warm-up \n\nNew idea\nPractice\n' })).toEqual(['Warm-up', 'New idea', 'Practice']);
   });
 
-  it('does not count wides and no-balls as legal deliveries', () => {
-    const c = play(DEFAULT_CRICKET, ['wd', 'nb', 0]);
-    expect(c).toMatchObject({ runs: 2, balls: 1 });
-    expect(c.batters[0]!.balls).toBe(1);
-    expect(c.bowler.runs).toBe(2);
+  it('keeps at most twelve parts', () => {
+    const agenda = Array.from({ length: 15 }, (_, i) => `Part ${i + 1}`).join('\n');
+    expect(agendaItems({ ...DEFAULT_CLASSROOM, agenda })).toHaveLength(12);
   });
 
-  it('takes a wicket: new batter on strike with a blank score', () => {
-    const c = play(DEFAULT_CRICKET, [4, 'W']);
-    expect(c).toMatchObject({ runs: 4, wickets: 1, balls: 2, striker: 0 });
-    expect(c.batters[0]).toEqual({ name: 'Batter 3', runs: 0, balls: 0 });
-    expect(c.bowler.wickets).toBe(1);
-  });
-
-  it('swaps ends after six legal balls and starts a fresh over on the next ball', () => {
-    const over = play(DEFAULT_CRICKET, [0, 0, 0, 0, 0, 0]);
-    expect(over).toMatchObject({ balls: 6, striker: 1 });
-    expect(over.thisOver).toHaveLength(6);
-    expect(oversText(over.balls)).toBe('1.0');
-    expect(recordBall(over, 2).thisOver).toEqual(['2']);
-  });
-
-  it('stops scoring when the innings is over', () => {
-    const allOut = play(DEFAULT_CRICKET, Array<Ball>(10).fill('W'));
-    expect(allOut.wickets).toBe(10);
-    expect(recordBall(allOut, 6)).toBe(allOut);
-
-    const bowledOut = play({ ...DEFAULT_CRICKET, oversLimit: 1 }, [1, 1, 1, 1, 1, 1]);
-    expect(recordBall(bowledOut, 6)).toBe(bowledOut);
-  });
-
-  it('works out run rates and what a chase needs', () => {
-    const chasing = play({ ...DEFAULT_CRICKET, oversLimit: 2, target: 20 }, [6, 6, 0, 0, 0, 0]);
-    const stats = cricketStats(chasing);
-    expect(stats.overs).toBe('1.0');
-    expect(stats.runRate).toBe('12.00');
-    expect(stats.requiredRate).toBe('8.00');
-    expect(stats.summary).toBe('Need 8 from 6 balls');
-    expect(stats.bowlerFigures).toBe('0-12 (1.0)');
-  });
-
-  it('announces the result of a chase', () => {
-    const won = play({ ...DEFAULT_CRICKET, target: 6 }, [6]);
-    expect(cricketStats(won).summary).toBe('IND won by 10 wickets');
-    expect(recordBall(won, 1)).toBe(won);
-
-    const lost = play({ ...DEFAULT_CRICKET, oversLimit: 1, target: 10 }, [1, 1, 1, 1, 1, 1]);
-    expect(cricketStats(lost).summary).toBe('AUS won by 3 runs');
-  });
-});
-
-describe('cricket moments', () => {
-  /** The moment the last of these balls earns. */
-  const after = (start: Cricket, balls: Ball[]) => {
-    const before = play(start, balls.slice(0, -1));
-    return momentFor(before, recordBall(before, balls[balls.length - 1]!));
-  };
-  const on = (runs: number): Cricket => ({ ...DEFAULT_CRICKET, runs, batters: [{ name: 'Kohli', runs, balls: 30 }, DEFAULT_CRICKET.batters[1]] });
-
-  it('plays a boundary with the batter who hit it', () => {
-    expect(after(DEFAULT_CRICKET, [1, 4])).toEqual({ moment: 'four', detail: 'Batter 2 4 (1)' });
-    expect(after(DEFAULT_CRICKET, [6])).toEqual({ moment: 'six', detail: 'Batter 1 6 (1)' });
-  });
-
-  it('plays a wicket with the score it leaves', () => {
-    expect(after(DEFAULT_CRICKET, [4, 'W'])).toEqual({ moment: 'wicket', detail: 'IND 4/1' });
-  });
-
-  it('plays a free hit after a no-ball but not after a wide', () => {
-    expect(after(DEFAULT_CRICKET, ['nb'])?.moment).toBe('freehit');
-    expect(after(DEFAULT_CRICKET, ['wd'])).toBeNull();
-  });
-
-  it('plays a milestone once, as the batter crosses it', () => {
-    expect(after(on(48), [4])).toEqual({ moment: 'fifty', detail: 'Kohli 52 (31)' });
-    expect(after(on(52), [4])?.moment).toBe('four');
-    expect(after(on(94), [6])).toEqual({ moment: 'hundred', detail: 'Kohli 100 (31)' });
-    expect(after(on(49), [1])?.moment).toBe('fifty');
-  });
-
-  it('stays quiet for ordinary balls and when nothing changed', () => {
-    expect(after(DEFAULT_CRICKET, [1])).toBeNull();
-    expect(after(DEFAULT_CRICKET, [4, 0])).toBeNull();
-    const scored = play(DEFAULT_CRICKET, [4]);
-    expect(momentFor(scored, { ...scored, title: 'Final' })).toBeNull();
-  });
-
-  it('ignores a reset, a new innings and a jump of more than an over', () => {
-    const scored = play(DEFAULT_CRICKET, [6, 'W']);
-    expect(momentFor(scored, DEFAULT_CRICKET)).toBeNull();
-    expect(momentFor(DEFAULT_CRICKET, { ...scored, batting: 'AUS' })).toBeNull();
-    expect(momentFor(DEFAULT_CRICKET, { ...scored, balls: 40 })).toBeNull();
-  });
-
-  it('follows a batter by name when the live feed swaps their order', () => {
-    const before = on(47);
-    const swapped: Cricket = { ...before, runs: 51, balls: 1, batters: [before.batters[1], { name: 'Kohli', runs: 51, balls: 31 }], thisOver: ['4'] };
-    expect(momentFor(before, swapped)).toEqual({ moment: 'fifty', detail: 'Kohli 51 (31)' });
+  it('does not accept a quiz with the wrong number of options', () => {
+    const scene = normalizeScene({ ...DEFAULT_SCENE, classroom: { ...DEFAULT_CLASSROOM, quiz: { ...DEFAULT_CLASSROOM.quiz, options: ['a'] } } });
+    expect(scene).toEqual(DEFAULT_SCENE);
   });
 });
 

@@ -1,5 +1,6 @@
 import {
   egressStatusSchema,
+  normalizeScene,
   redactRtmpTarget,
   type CommentDto,
   type EgressJob,
@@ -67,7 +68,7 @@ export function liveRoutes(app: FastifyInstance, deps: Deps): void {
     }
     req.log.info({ targets: targets.map((t) => redactRtmpTarget(t.url)) }, 'going live');
 
-    const started = await deps.egress.start(broadcast.id, targets);
+    const started = await deps.egress.start(broadcast.id, targets, { record: normalizeScene(broadcast.scene).record });
     const sessionRow = {
       broadcastId: broadcast.id,
       mode: deps.egress.mode,
@@ -155,10 +156,12 @@ export function liveRoutes(app: FastifyInstance, deps: Deps): void {
       .from(egressSessions)
       .where(eq(egressSessions.broadcastId, claims.bid));
     if (!session || session.mode !== 'relay') throw notFound('Egress session');
+    // The studio locks the Record switch while live, so a reconnect claims the same setting.
+    const [broadcast] = await db.select({ scene: broadcasts.scene }).from(broadcasts).where(eq(broadcasts.id, claims.bid));
     return {
       broadcastId: claims.bid,
       targets: deps.box.openJson<EgressTarget[]>(session.targetsEnc),
-      record: true,
+      record: normalizeScene(broadcast?.scene).record,
     };
   });
 

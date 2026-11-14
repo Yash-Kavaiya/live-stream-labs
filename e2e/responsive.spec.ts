@@ -109,7 +109,7 @@ test('studio fits phone, tablet and desktop for host and guest; device options w
 
   // --- Guest on a phone ---
   await page.getByTestId('invite').click();
-  await expect(field(page, 'invite-url')).toHaveValue(/\/join\//);
+  await expect(field(page, 'invite-url')).toHaveValue(/\/j\//);
   const inviteUrl = await field(page, 'invite-url').inputValue();
   await page.keyboard.press('Escape');
 

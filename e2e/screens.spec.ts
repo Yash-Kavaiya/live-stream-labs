@@ -78,20 +78,24 @@ for (const theme of ['light', 'dark'] as const) {
       await program(`news-${view}`);
     }
 
-    // Cricket: score an over, then both views.
-    await useTemplate('cricket');
-    // A new cricket scene follows a live match; the ball buttons belong to scoring by hand.
-    await page.getByTestId('cricket-source-manual').click();
-    // The live feed may already have filled in a finished match: start a fresh innings.
-    await page.getByTestId('cricket-reset').click();
-    for (const ball of ['1', '4', '0', 'W', '6', 'wd', '2']) await page.getByTestId(`ball-${ball}`).click();
-    // The six a moment ago is still playing its banner: let it clear the frame.
+    // Classroom: every scene, with a lesson plan, board notes and a revealed quiz.
+    await useTemplate('classroom');
+    await field(page, 'class-lesson').fill('Newton’s laws of motion');
+    await field(page, 'class-agenda').fill('Warm-up\nFirst law\nSecond law\nPractice');
+    await page.getByTestId('class-next').click();
+    await field(page, 'class-notes').fill('An object keeps moving unless a force acts on it\n- A ball rolls until friction stops it\n- A seat belt stops you, not the car');
+    await field(page, 'quiz-question').fill('A ball rolls across a carpet. What stops it?');
+    for (const [letter, text] of [['A', 'Nothing'], ['B', 'Friction'], ['C', 'Gravity'], ['D', 'The wind']]) await field(page, `quiz-option-${letter}`).fill(text);
+    await page.getByTestId('quiz-answer-B').click();
+    await page.getByTestId('quiz-reveal').click();
+    // Let the reveal's emoji shower clear the frame.
     await page.waitForTimeout(4200);
-    await program('cricket-match');
-    await page.getByTestId('cricket-dashboard').click();
-    await page.waitForTimeout(1200);
-    await program('cricket-dashboard');
-    await shot('studio-cricket-page');
+    for (const view of ['lecture', 'slides', 'board', 'quiz']) {
+      await page.getByTestId(`class-${view}`).click();
+      await page.waitForTimeout(1200);
+      await program(`class-${view}`);
+    }
+    await shot('studio-class-page');
 
     // Watch party: mid-celebration.
     await useTemplate('watchparty');

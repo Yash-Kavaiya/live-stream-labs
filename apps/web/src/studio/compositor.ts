@@ -1,8 +1,7 @@
 import {
   bannerInSlot,
+  CLASS_BOTTOM,
   computeSceneLayout,
-  cricketOwnsLayout,
-  CRICKET_STRIP,
   Fade,
   fitRect,
   parseSourceId,
@@ -10,6 +9,7 @@ import {
   formatCountdown,
   hasCountdown,
   SCREEN_LABELS,
+  socialLinks,
   TEMPLATES,
   TileAnimator,
   type AnimatedTile,
@@ -22,10 +22,11 @@ import {
   type TemplateId,
   type Tile,
 } from '@studio/shared';
+import { drawSocialRow } from './graphics/socials';
+import { getLiveInk } from './class-ink';
 import { drawBadge, drawCta, drawHeadline, drawLowerThird, drawNameTitle, drawSocial, drawTicker, drawTitleCard } from './graphics/banners';
 import { CELEBRATION_MS, drawCelebration } from './graphics/celebration';
-import { drawMoment } from './graphics/cricket-moments';
-import { drawCricketBug, drawCricketCard, drawCricketDashboard, drawCricketSplit, drawCricketStrip } from './graphics/cricket';
+import { drawClassroom } from './graphics/classroom';
 import { drawNews } from './graphics/news';
 import { PartyLayer } from './graphics/party';
 import { ellipsize, FONT, readableOn, wrapText, type Painter } from './graphics/painter';
@@ -210,6 +211,7 @@ export class Compositor {
         this.drawTemplateFurniture(themed.value, scene, now, {
           headline: headline ? { text: headline.value, alpha: headline.alpha } : null,
           sideOccupied: targets.length > 1,
+          hasSources: targets.length > 0,
         }),
       );
     }
@@ -446,14 +448,17 @@ export class Compositor {
     ctx.fillStyle = this.gradient(TEMPLATES[template].backdrop);
     ctx.fillRect(0, 0, size.width, size.height);
 
-    if (template === 'cricket') {
-      // The boundary rope, very faint.
+    if (template === 'classroom') {
+      // Faint ruled lines, like a page of an exercise book.
       ctx.save();
-      ctx.globalAlpha *= 0.1;
+      ctx.globalAlpha *= 0.06;
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = unit * 0.5;
+      ctx.lineWidth = unit * 0.2;
       ctx.beginPath();
-      ctx.ellipse(size.width / 2, size.height * 1.05, size.width * 0.62, size.height * 0.8, 0, 0, Math.PI * 2);
+      for (let y = unit * 14; y < size.height; y += unit * 6) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(size.width, y);
+      }
       ctx.stroke();
       ctx.restore();
     } else if (template === 'watchparty') {
@@ -482,30 +487,26 @@ export class Compositor {
     }
   }
 
-  /** The fixed on-screen graphics of a template: channel bar, headlines, scoreboards. */
+  /** The fixed on-screen graphics of a template: channel bar, headlines, the lesson plan. */
   private drawTemplateFurniture(
     template: TemplateId,
     scene: Scene,
     now: number,
-    news: { headline: { text: string; alpha: number } | null; sideOccupied: boolean },
+    frame: { headline: { text: string; alpha: number } | null; sideOccupied: boolean; hasSources: boolean },
   ): void {
     const { unit } = this;
     if (template === 'newsroom') {
-      drawNews(this.painter, scene, { ...news, now });
+      drawNews(this.painter, scene, { ...frame, now });
     } else if (template === 'watchparty') {
       this.party.draw(this.painter, scene, now, Date.now());
-    } else if (template === 'cricket' && scene.cricket.view === 'dashboard') {
-      drawCricketDashboard(this.painter, scene, news.sideOccupied || scene.stage.length > 0);
-    } else if (template === 'cricket' && scene.cricket.view === 'card') {
-      drawCricketCard(this.painter, scene, news.sideOccupied || scene.stage.length > 0);
-    } else if (template === 'cricket' && scene.cricket.view === 'split') {
-      drawCricketSplit(this.painter, scene);
-    } else if (template === 'cricket' && scene.cricket.view === 'bug') {
-      drawCricketBug(this.painter, scene);
-    } else if (template === 'cricket') {
-      drawCricketStrip(this.painter, scene);
-      // Banners, the ticker and comments sit above the strip.
-      this.bottomInset += CRICKET_STRIP * unit;
+    } else if (template === 'classroom') {
+      const { slides, slide } = scene.classroom;
+      const slideUrl = slides.length ? slides[Math.min(slide, slides.length - 1)] : undefined;
+      // Load the next slide too, so stepping forward never shows a blank.
+      if (slideUrl) this.images.get(slides[Math.min(slide + 1, slides.length - 1)]);
+      drawClassroom(this.painter, scene, { ...frame, slideImage: this.images.get(slideUrl) ?? null, live: getLiveInk() });
+      // Banners, the ticker and comments sit above the lesson plan strip.
+      this.bottomInset += CLASS_BOTTOM * unit;
     }
   }
 
@@ -519,8 +520,7 @@ export class Compositor {
     }
     const elapsed = now - this.celebration.startedAt;
     if (elapsed >= CELEBRATION_MS[next.kind]) return;
-    if (next.kind === 'moment') drawMoment(this.painter, next, elapsed, scene.brand.color);
-    else drawCelebration(this.painter, next, elapsed);
+    drawCelebration(this.painter, next, elapsed);
   }
 
   // ---------- Overlays ----------
@@ -541,22 +541,22 @@ export class Compositor {
     const p = this.painter;
     const color = scene.brand.color;
     const { unit } = this;
-    // The news room and the cricket dashboard have no free space at the bottom for banners; the
-    // news room shows a lower third as its headline instead. Tickers and top banners still run.
-    const bottomTaken =
-      scene.template === 'newsroom' || (scene.template === 'cricket' && cricketOwnsLayout(scene.cricket.view));
+    // The news room's headline fills the bottom of the frame. A plain lower third becomes that
+    // headline; every other bottom or side banner stacks above it, so all banners work here too.
+    const isNews = scene.template === 'newsroom';
     // Templates with their own furniture along the top push top banners below it.
-    const topOffset = scene.template === 'newsroom' ? unit * 9 : scene.template === 'watchparty' ? unit * 6 : 0;
+    const topOffset = isNews ? unit * 9 : scene.template === 'classroom' ? unit * 11 : scene.template === 'watchparty' ? unit * 6 : 0;
     const slot = (name: BannerSlot, hidden = false) => this.banners[name].step(hidden ? null : bannerInSlot(scene, name), dt);
 
     this.bannerZone = { top: Infinity, alpha: 0 };
     const ticker = slot('ticker');
     if (ticker) this.bottomInset += drawTicker(p, ticker.value, ticker.alpha, color, now, this.bottomInset).used;
+    if (isNews) this.bottomInset = Math.max(this.bottomInset, unit * 22);
 
-    const side = slot('side', bottomTaken);
+    const side = slot('side');
     if (side) drawCta(p, side.value, side.alpha, color, now, this.bottomInset);
 
-    const bottom = slot('bottom', bottomTaken);
+    const bottom = slot('bottom', isNews && bannerInSlot(scene, 'bottom')?.style === 'lower-third');
     if (bottom) {
       const draw = bottom.value.style === 'name-title' ? drawNameTitle : bottom.value.style === 'social' ? drawSocial : drawLowerThird;
       const box = draw(p, bottom.value, bottom.alpha, color, this.bottomInset);
@@ -631,12 +631,18 @@ export class Compositor {
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, size.width, size.height);
 
+    // Social links take the lower part of the frame; the title and countdown move up to make room.
+    const links = scene.socials.show ? socialLinks(scene.socials) : [];
+    if (links.length) drawSocialRow(this.painter, links, scene.socials.qr, unit * (scene.socials.qr ? 64 : 76));
+
     const logo = this.images.get(scene.brand.logoUrl);
     const cx = size.width / 2;
-    let y = size.height * 0.44;
+    const compact = links.length > 0 && scene.socials.qr;
+    let y = size.height * (compact ? 0.3 : links.length ? 0.4 : 0.44);
     if (logo) {
-      const scale = Math.min((unit * 18) / logo.naturalWidth, (unit * 18) / logo.naturalHeight);
-      ctx.drawImage(logo, cx - (logo.naturalWidth * scale) / 2, y - unit * 30, logo.naturalWidth * scale, logo.naturalHeight * scale);
+      const box = unit * (compact ? 13 : 18);
+      const scale = Math.min(box / logo.naturalWidth, box / logo.naturalHeight);
+      ctx.drawImage(logo, cx - (logo.naturalWidth * scale) / 2, y - unit * (compact ? 24 : 30), logo.naturalWidth * scale, logo.naturalHeight * scale);
     }
 
     ctx.textAlign = 'center';

@@ -424,7 +424,7 @@ export function RecordingsPage() {
 
   return (
     <>
-      <PageHeader title="Recordings" subtitle="Every stream is recorded. Watch, download or share a link." />
+      <PageHeader title="Recordings" subtitle="Streams are recorded unless you turn Record off in the studio. Watch, download or share a link." />
       {!recordings.data ? (
         <div className="center"><Spinner /></div>
       ) : recordings.data.length === 0 ? (

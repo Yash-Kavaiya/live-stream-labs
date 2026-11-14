@@ -7,6 +7,7 @@ import type { AdapterResolver } from '../destinations/adapters';
 import type { Fetch } from '../destinations/types';
 import type { EgressProvider } from '../egress/providers';
 import type { RundownService } from '../news/service';
+import type { QuizWriter } from '../quiz/writer';
 import type { LiveKitGateway } from '../services/livekit';
 
 /** Everything a route needs. Built once in `index.ts`; tests pass fakes. */
@@ -20,6 +21,7 @@ export interface Deps {
   adapterFor: AdapterResolver;
   fetch: Fetch;
   rundowns: RundownService;
+  quiz: QuizWriter;
 }
 
 export class HttpError extends Error {

@@ -1,6 +1,5 @@
 import {
   addToStage,
-  cricketOwnsLayout,
   promoteOnStage,
   removeFromStage,
   sourceId,
@@ -17,19 +16,19 @@ import { formatDuration } from '../lib/format';
 import { applyMicPrefs, useEffectsSupported, useLocalCamera, useStoredCameraEffect, useStoredMicPrefs, useTrackEffect, type MicPrefs } from './camera-effects';
 import { OptionsCaret, Popover } from './device-menus';
 import { CameraSettings, DestinationsDialog, InviteDialog, MicSettings, PlatformBadge, SettingsDialog } from './dialogs';
-import { shareVideoClip, useAutoDirector, useComments, useElapsed, useSceneController } from './hooks';
+import { shareVideoClip, useAutoDirector, useComments, useElapsed, useFullscreen, useSceneController } from './hooks';
 import { BannersPanel } from './banners-panel';
 import { BrandPanel, ChatPanel, CommentsPanel, ScenesPanel } from './panels';
 import { LayoutPicker } from './LayoutThumb';
 import { onAir } from './sources';
 import { ProgramCanvas, SourceTile } from './stage';
 import { TEMPLATE_PAGES, TemplatePage } from './template-panels';
-import { useLiveCricket } from './live-cricket';
 import { MusicPlayer } from './music/player';
 import { useParty } from './party/use-party';
 import { Teleprompter } from './rundown/teleprompter';
 import { onAirIndex, takeItem, useRundown } from './rundown/use-rundown';
 import { useLiveControl } from './useLiveControl';
+import { useClassInk } from './class-ink';
 import { useDrawableSources, useStudioRoom, type JoinOptions } from './useStudioRoom';
 
 type PanelId = 'scenes' | 'template' | 'comments' | 'banners' | 'brand' | 'chat';
@@ -63,6 +62,8 @@ export function StudioRoom({ session, join, onExit }: Props) {
   const toast = useToast();
   const { config } = useAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(stageRef);
 
   const studio = useStudioRoom(session, join);
   const { room, view } = studio;
@@ -129,8 +130,10 @@ export function StudioRoom({ session, join, onExit }: Props) {
     if (hostScene.stage.length === 0) updateScene((s) => addToStage(s, sourceId('cam', session.identity)));
   }, [isHost, studio.status, hostScene.stage.length, session.identity, updateScene]);
 
+  // The whiteboard and slides windows draw through this.
+  useClassInk(broadcastId, hostScene, updateScene, isHost);
+
   useAutoDirector(hostScene, updateScene, view.sources, isHost && studio.status === 'connected');
-  const liveScore = useLiveCricket(hostScene, updateScene, isHost);
 
   // The day's rundown, for the News page and the teleprompter. Only the host's news room asks for it.
   const rundown = useRundown(isHost && hostScene.template === 'newsroom');
@@ -251,14 +254,14 @@ export function StudioRoom({ session, join, onExit }: Props) {
 
   const isLive = live.phase === 'live';
   const stageHasMedia = scene.stage.includes('media');
-  // The second tab is the page of whichever template is on: Layout, News, Cricket or Party.
+  // The second tab is the page of whichever template is on: Layout, News, Class or Party.
   const hostTabs = [
     { id: 'scenes' as const, label: 'Scenes', icon: 'dashboard_customize' },
     { id: 'template' as const, ...TEMPLATE_PAGES[scene.template] },
     ...FIXED_TABS,
   ];
   const templateOwnsLayout =
-    scene.template === 'newsroom' || (scene.template === 'cricket' && cricketOwnsLayout(scene.cricket.view));
+    scene.template === 'newsroom' || scene.template === 'classroom';
 
   return (
     <div className="studio" data-testid="studio" data-status={studio.status}>
@@ -292,6 +295,24 @@ export function StudioRoom({ session, join, onExit }: Props) {
                 ))
               )}
             </button>
+            <button
+              type="button"
+              className={`record-toggle ${hostScene.record ? 'on' : ''}`}
+              aria-pressed={hostScene.record}
+              disabled={live.phase !== 'idle'}
+              onClick={() => updateScene((s) => ({ ...s, record: !s.record }))}
+              title={
+                live.phase !== 'idle'
+                  ? `${hostScene.record ? 'Recording this stream' : 'Not recording this stream'}. Change it before you next go live.`
+                  : hostScene.record
+                    ? 'The stream is saved to Recordings. Click to stream without saving a file.'
+                    : 'Streaming only: no file is saved. Click to record the stream.'
+              }
+              data-testid="record-toggle"
+            >
+              <Icon name={hostScene.record ? 'radio_button_checked' : 'radio_button_unchecked'} filled={hostScene.record} />
+              <span className="label-large wide-only">{hostScene.record ? 'Record on' : 'Record off'}</span>
+            </button>
             <Button variant="tonal" icon="person_add" onClick={() => setDialog('invite')} data-testid="invite">
               <span className="wide-only">Invite</span>
             </Button>
@@ -311,8 +332,19 @@ export function StudioRoom({ session, join, onExit }: Props) {
       <div className="studio-body">
         <section className="studio-main">
           <div className="studio-scroll">
-          <div className="stage-frame">
+          <div className="stage-frame" ref={stageRef} onDoubleClick={fullscreen.supported ? fullscreen.toggle : undefined}>
             <ProgramCanvas scene={scene} drawables={drawables} canvasRef={canvasRef} />
+            {fullscreen.supported && (
+              <div className="stage-fullscreen" onDoubleClick={(e) => e.stopPropagation()}>
+                <IconButton
+                  variant="tonal"
+                  icon={fullscreen.active ? 'fullscreen_exit' : 'fullscreen'}
+                  label={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+                  onClick={fullscreen.toggle}
+                  data-testid="stage-fullscreen"
+                />
+              </div>
+            )}
             {studio.status === 'connecting' && (
               <div className="stage-overlay center"><Spinner /></div>
             )}
@@ -339,7 +371,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
             <div className="row wrap" style={{ justifyContent: 'space-between' }}>
               {templateOwnsLayout ? (
                 <span className="chip">
-                  <Icon name="dashboard_customize" /> Layout is set by the {scene.template === 'newsroom' ? 'news scene' : 'cricket layout'}
+                  <Icon name="dashboard_customize" /> Layout is set by the {scene.template === 'newsroom' ? 'news scene' : 'class scene'}
                 </span>
               ) : (
                 <LayoutPicker value={scene.layout} style={scene.style} onChange={(layout) => updateScene((s) => ({ ...s, layout }))} />
@@ -438,7 +470,7 @@ export function StudioRoom({ session, join, onExit }: Props) {
           {isHost ? <Tabs<PanelId> tabs={hostTabs} active={panel} onChange={setPanel} /> : <div className="title-medium" style={{ padding: 16 }}>Studio chat</div>}
           <div className="studio-panel">
             {panel === 'scenes' && <ScenesPanel scene={scene} update={updateScene} onOpenPage={() => setPanel('template')} />}
-            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} liveScore={liveScore} rundown={rundown} party={party} stageNames={stageNames} />}
+            {panel === 'template' && <TemplatePage broadcastId={broadcastId} scene={scene} update={updateScene} rundown={rundown} party={party} stageNames={stageNames} />}
             {panel === 'comments' && <CommentsPanel comments={comments} scene={scene} update={updateScene} />}
             {panel === 'banners' && <BannersPanel broadcastId={broadcastId} scene={scene} update={updateScene} music={music} ensureMusic={ensureMusic} handle={rundown.show?.x} />}
             {panel === 'brand' && <BrandPanel broadcastId={broadcastId} scene={scene} update={updateScene} />}

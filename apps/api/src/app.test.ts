@@ -101,10 +101,10 @@ describe('broadcast lifecycle', () => {
   });
 
   it('creates a broadcast that opens in the chosen template', async () => {
-    const created = (await host.call('POST', '/api/broadcasts', { title: 'Match day', template: 'cricket' })).body;
+    const created = (await host.call('POST', '/api/broadcasts', { title: 'Physics 101', template: 'classroom' })).body;
     const session = (await host.call('POST', `/api/broadcasts/${created.id}/session`)).body;
-    expect(session.scene.template).toBe('cricket');
-    expect(session.scene.brand.color).toBe('#FF9933');
+    expect(session.scene.template).toBe('classroom');
+    expect(session.scene.brand.color).toBe('#FBBC04');
     expect((await host.call('POST', '/api/broadcasts', { title: 'Bad', template: 'sports' })).status).toBe(400);
   });
 
@@ -125,7 +125,7 @@ describe('broadcast lifecycle', () => {
 
   it('lets a guest join through an invite link without an account', async () => {
     const invite = (await host.call('POST', `/api/broadcasts/${broadcastId}/invites`)).body;
-    expect(invite.url).toContain(`/join/${invite.token}`);
+    expect(invite.url).toContain(`/j/${invite.token}`);
 
     const guest = new TestClient(t.app);
     expect((await guest.call('GET', `/api/invites/${invite.token}`)).body.title).toBe('Launch day');
@@ -226,6 +226,17 @@ describe('broadcast lifecycle', () => {
 
     const shared = await new TestClient(t.app).call('GET', `/api/watch/${recordings[0].shareToken}`);
     expect(shared.body.title).toBe('Launch day');
+  });
+
+  it('streams without a recording when Record is off', async () => {
+    const scene = { ...DEFAULT_SCENE, record: false };
+    expect((await host.call('PUT', `/api/broadcasts/${broadcastId}/scene`, { scene })).status).toBe(200);
+    const live = await host.call('POST', `/api/broadcasts/${broadcastId}/live`);
+    expect(live.status).toBe(200);
+    const token = new URL(live.body.ingestUrl).searchParams.get('token')!;
+    const claim = await t.app.inject({ method: 'POST', url: '/internal/egress/claim', payload: { token }, headers: internal });
+    expect(claim.json()).toMatchObject({ broadcastId, record: false });
+    await report({ broadcastId, state: 'ended', error: null, recording: null, targets: [{ destinationId, status: 'ended', error: null }] });
   });
 
   it('refuses to go live without a destination', async () => {

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_PARTY, partySchema } from './party';
+import { DEFAULT_SOCIALS, socialsSchema } from './socials';
+import { boardKey, inkLayerSchema, slideKey } from './ink';
 
 export const LAYOUT_IDS = [
   'solo',
@@ -130,7 +132,7 @@ export const musicTrackSchema = z.object({
 export type MusicTrack = z.infer<typeof musicTrackSchema>;
 export const MAX_MUSIC_TRACKS = 12;
 
-export const TEMPLATE_IDS = ['none', 'newsroom', 'cricket', 'watchparty'] as const;
+export const TEMPLATE_IDS = ['none', 'newsroom', 'classroom', 'watchparty'] as const;
 export const templateIdSchema = z.enum(TEMPLATE_IDS);
 export type TemplateId = z.infer<typeof templateIdSchema>;
 
@@ -188,110 +190,100 @@ export const DEFAULT_NEWS: News = {
   rundownItemId: null,
 };
 
-// ---------- Cricket ----------
-
-const count = z.number().int().min(0).max(9999);
-const playerName = z.string().max(24);
-
-export const batterSchema = z.object({ name: playerName, runs: count, balls: count });
-export type Batter = z.infer<typeof batterSchema>;
+// ---------- Classroom ----------
 
 /**
- * How the cricket template arranges the frame:
- *
- *   match      cameras in the usual layout above a score strip
- *   bug        cameras fill the frame, with a small score box in the corner
- *   split      cameras on the left, a score panel on the right
- *   dashboard  the full scoreboard, cameras in a column at the side
- *   card       the batting and bowling card, cameras in a column at the side
+ * The scenes of a lesson:
+ *   lecture  the teacher, with the lesson plan beside them (guests take the side column)
+ *   slides   the slide deck (or a shared screen, clip or image) large, cameras in a column at the side
+ *   board    a whiteboard to draw on, with typed notes, cameras in a column at the side
+ *   quiz     a multiple-choice question, the teacher in a column at the side
  */
-export const CRICKET_VIEWS = ['match', 'bug', 'split', 'dashboard', 'card'] as const;
-export type CricketView = (typeof CRICKET_VIEWS)[number];
+export const CLASS_VIEWS = ['lecture', 'slides', 'board', 'quiz'] as const;
+export type ClassView = (typeof CLASS_VIEWS)[number];
 
-/** One innings, scored ball by ball by hand or followed from a live score feed. See `cricket.ts`. */
-export const cricketSchema = z.object({
-  view: z.enum(CRICKET_VIEWS).catch('match'),
-  title: z.string().max(40),
-  batting: playerName,
-  bowling: playerName,
-  runs: count,
-  wickets: z.number().int().min(0).max(10),
-  /** Legal balls bowled in the innings. */
-  balls: count,
-  oversLimit: z.number().int().min(1).max(90),
-  /** Runs needed to win when chasing; null in the first innings. */
-  target: count.nullable(),
-  batters: z.tuple([batterSchema, batterSchema]),
-  striker: z.union([z.literal(0), z.literal(1)]),
-  bowler: z.object({ name: playerName, balls: count, runs: count, wickets: count }),
-  /** Outcomes of the current over, oldest first: "0".."6", "W", "wd", "nb". */
-  thisOver: z.array(z.string().max(3)).max(14),
+export const QUIZ_OPTIONS = 4;
+export const MAX_BOARD_PAGES = 20;
+/** Questions waiting in the quiz window's bank. */
+export const MAX_QUIZ_BANK = 12;
+export const MAX_SLIDES = 120;
 
-  // Added with live scores; the defaults keep scenes saved before then valid.
-  /** manual: the host taps each ball. live: the host's studio copies a real match into this innings. */
-  source: z.enum(['manual', 'live']).default('manual'),
-  /** The feed's ids for the match being followed. */
-  liveMatch: z.object({ league: z.string().max(20), event: z.string().max(20) }).nullable().default(null),
-  /** Live only: where the match stands, e.g. "IND need 165 from 118 balls". */
-  status: z.string().max(80).default(''),
-  /** Live only: the other side's score, e.g. "WI 171 (19.1 ov)". */
-  other: z.string().max(40).default(''),
-  /** Live only: the batting card of this innings, in batting order. */
-  card: z
-    .array(z.object({ name: playerName, how: z.string().max(40), runs: count, balls: count }))
-    .max(11)
-    .default([]),
-  /** Live only: the bowlers used in this innings. */
-  attack: z
-    .array(z.object({ name: playerName, overs: z.string().max(6), runs: count, wickets: count }))
-    .max(8)
-    .default([]),
-  /** Live only: runs and wickets in each over of this innings, for the over-by-over chart. */
-  overs: z
-    .array(z.object({ over: count, runs: count, wickets: z.number().int().min(0).max(10) }))
-    .max(50)
-    .default([]),
-  /** Live only: the unbroken stand between the two batters at the crease. */
-  partnership: z.object({ runs: count, balls: count }).nullable().default(null),
-  /** Live only: the total the batting side is heading for at this rate (first innings). */
-  projected: count.nullable().default(null),
-  /** Live only: team colours, batting side first; null draws both in the brand colour. */
-  colors: z.tuple([hexColor, hexColor]).nullable().default(null),
-  /** Play a moment over the frame when the score earns one: a boundary, a wicket, a milestone, a free hit. */
-  autoMoments: z.boolean().default(true),
+export const quizSchema = z.object({
+  question: z.string().max(160),
+  /** A to D; an empty option is not shown. */
+  options: z.array(z.string().max(60)).length(QUIZ_OPTIONS),
+  /** Index of the right option, or null when none is chosen yet. */
+  answer: z.number().int().min(0).max(QUIZ_OPTIONS - 1).nullable(),
+  /** True once the teacher shows the answer on screen. */
+  revealed: z.boolean(),
 });
-export type Cricket = z.infer<typeof cricketSchema>;
+export type Quiz = z.infer<typeof quizSchema>;
 
-export const DEFAULT_CRICKET: Cricket = {
-  view: 'match',
-  title: 'T20 Match',
-  batting: 'IND',
-  bowling: 'AUS',
-  runs: 0,
-  wickets: 0,
-  balls: 0,
-  oversLimit: 20,
-  target: null,
-  batters: [
-    { name: 'Batter 1', runs: 0, balls: 0 },
-    { name: 'Batter 2', runs: 0, balls: 0 },
-  ],
-  striker: 0,
-  bowler: { name: 'Bowler', balls: 0, runs: 0, wickets: 0 },
-  thisOver: [],
-  // A new cricket scene follows a real match; scenes saved before live scores stay hand-scored.
-  source: 'live',
-  liveMatch: null,
-  status: '',
-  other: '',
-  card: [],
-  attack: [],
-  overs: [],
-  partnership: null,
-  projected: null,
-  colors: null,
-  autoMoments: true,
+export const classroomSchema = z.object({
+  view: z.enum(CLASS_VIEWS).catch('lecture'),
+  /** The course or subject, e.g. "Physics 101". */
+  course: z.string().max(32),
+  /** Today's lesson, e.g. "Newton's laws of motion". */
+  lesson: z.string().max(80),
+  /** The parts of the lesson, one per line. */
+  agenda: z.string().max(400),
+  /** The part of the lesson being taught, counted from 0. */
+  step: z.number().int().min(0).max(11),
+  /** Whiteboard notes, one per line; a line starting with "- " is a bullet. */
+  board: z.string().max(600),
+  quiz: quizSchema,
+  /** Whiteboard pages, and the one on screen (from 0). Added later, so they default. */
+  boardPages: z.number().int().min(1).max(MAX_BOARD_PAGES).default(1),
+  boardPage: z.number().int().min(0).max(MAX_BOARD_PAGES - 1).default(0),
+  /** The slide deck: one uploaded image per slide, and the slide on screen (from 0). */
+  slides: z.array(assetUrl).max(MAX_SLIDES).default([]),
+  slide: z.number().int().min(0).max(MAX_SLIDES - 1).default(0),
+  /**
+   * The ink on whatever surface is on screen: the whiteboard page, or the current slide. Only that
+   * one travels in the scene; the host's browser keeps the rest (see class-ink in the web app).
+   */
+  ink: inkLayerSchema.nullable().default(null),
+  /** Questions prepared in the quiz window (written by hand or by AI). One at a time goes on air as `quiz`. */
+  quizBank: z.array(quizSchema).max(MAX_QUIZ_BANK).default([]),
+  /** Which bank question is on air, or -1 when the on-air quiz was typed in directly. */
+  quizPick: z.number().int().min(-1).max(MAX_QUIZ_BANK - 1).default(-1),
+});
+export type Classroom = z.infer<typeof classroomSchema>;
+
+export const DEFAULT_QUIZ: Quiz = { question: '', options: ['', '', '', ''], answer: null, revealed: false };
+
+export const DEFAULT_CLASSROOM: Classroom = {
+  view: 'lecture',
+  course: 'CLASS',
+  lesson: '',
+  agenda: '',
+  step: 0,
+  board: '',
+  quiz: DEFAULT_QUIZ,
+  boardPages: 1,
+  boardPage: 0,
+  slides: [],
+  slide: 0,
+  ink: null,
+  quizBank: [],
+  quizPick: -1,
 };
+
+/** The surface whose ink is on screen now, or null when the scene shows neither board nor slides. */
+export function visibleInkKey(classroom: Classroom): string | null {
+  if (classroom.view === 'board') return boardKey(classroom.boardPage);
+  if (classroom.view === 'slides' && classroom.slides.length > 0) return slideKey(Math.min(classroom.slide, classroom.slides.length - 1));
+  return null;
+}
+
+/** The lesson plan as a list: blank lines dropped, at most 12 parts. */
+export function agendaItems(classroom: Classroom): string[] {
+  return classroom.agenda
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
 
 // ---------- Celebrations ----------
 
@@ -299,21 +291,13 @@ export const DEFAULT_CRICKET: Cricket = {
  * A one-shot animation over the whole frame. Every client plays it when it sees a new `id`;
  * `at` lets someone who joins later skip one that is already over.
  */
-/** The cricket moments. Each has its own cartoon; `custom` shows an emoji instead. */
-export const CRICKET_MOMENTS = ['four', 'six', 'wicket', 'fifty', 'hundred', 'freehit', 'custom'] as const;
-export type CricketMoment = (typeof CRICKET_MOMENTS)[number];
-
 export const celebrationSchema = z.object({
   id: z.string().max(40),
-  kind: z.enum(['winner', 'reaction', 'moment']),
+  kind: z.enum(['winner', 'reaction']),
   emoji: z.string().max(8),
-  /** Winner's name, or a moment's headline when it is not the usual one. Empty for a reaction. */
+  /** Winner's name. Empty for a reaction. */
   text: z.string().max(40),
   at: z.number(),
-  /** Moment only: which cartoon plays. */
-  moment: z.enum(CRICKET_MOMENTS).optional(),
-  /** Moment only: the line under the headline, e.g. "Kohli 52 (31)". */
-  detail: z.string().max(40).optional(),
 });
 export type Celebration = z.infer<typeof celebrationSchema>;
 
@@ -402,12 +386,17 @@ export const sceneSchema = z.object({
   screenEndsAt: z.number().nullable().default(null),
   auto: autoSchema.default(DEFAULT_AUTO),
   news: newsSchema.default(DEFAULT_NEWS),
-  cricket: cricketSchema.default(DEFAULT_CRICKET),
-  celebration: celebrationSchema.nullable().default(null),
+  classroom: classroomSchema.default(DEFAULT_CLASSROOM),
+  // A celebration of a kind that no longer exists (a cricket moment) is dropped, not the whole scene.
+  celebration: celebrationSchema.nullable().default(null).catch(null),
   style: layoutStyleSchema.default(DEFAULT_STYLE),
   activeBannerIds: z.array(z.string().max(40)).max(8).default([]),
   music: z.array(musicTrackSchema).max(MAX_MUSIC_TRACKS).default([]),
   party: partySchema.default(DEFAULT_PARTY),
+  /** Social links and QR codes on the Starting, BRB and Ending screens. */
+  socials: socialsSchema.default(DEFAULT_SOCIALS),
+  /** Save the stream to a file when it goes live. Off saves storage; it is read once, at go-live. */
+  record: z.boolean().default(true),
 });
 export type Scene = z.infer<typeof sceneSchema>;
 
@@ -426,12 +415,14 @@ export const DEFAULT_SCENE: Scene = {
   screenEndsAt: null,
   auto: DEFAULT_AUTO,
   news: DEFAULT_NEWS,
-  cricket: DEFAULT_CRICKET,
+  classroom: DEFAULT_CLASSROOM,
   celebration: null,
   style: DEFAULT_STYLE,
   activeBannerIds: [],
   music: [],
   party: DEFAULT_PARTY,
+  socials: DEFAULT_SOCIALS,
+  record: true,
 };
 
 /** Parses a stored or received scene, filling in fields that older scenes do not have. */
@@ -500,6 +491,18 @@ export function toggleBanner(scene: Scene, id: string): Scene {
 
 export function addBanner(scene: Scene, banner: Banner): Scene {
   return { ...scene, banners: [...scene.banners, banner].slice(-30) };
+}
+
+/** Changes a banner's wording in place; if it is showing, the new wording shows straight away. */
+export function updateBanner(scene: Scene, id: string, change: Partial<Pick<Banner, 'text' | 'subtitle'>>): Scene {
+  const text = change.text?.trim();
+  if (change.text !== undefined && !text) return scene;
+  return {
+    ...scene,
+    banners: scene.banners.map((b) =>
+      b.id === id ? { ...b, ...(text ? { text } : {}), ...(change.subtitle !== undefined ? { subtitle: change.subtitle.trim() } : {}) } : b,
+    ),
+  };
 }
 
 export function removeBanner(scene: Scene, id: string): Scene {

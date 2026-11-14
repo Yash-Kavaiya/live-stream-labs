@@ -3,6 +3,10 @@ import {
   MAX_ON_STAGE,
   PLATFORMS,
   SCREEN_IDS,
+  SOCIAL_IDS,
+  SOCIALS,
+  socialLinks,
+  type Socials,
   setScreen,
   setScreenTimer,
   TEMPLATE_IDS,
@@ -205,6 +209,39 @@ const SCREEN_BUTTONS: Record<ScreenId, { label: string; icon: string }> = {
   ending: { label: 'Ending', icon: 'waving_hand' },
 };
 
+/** The host's social links, shown with QR codes on the Starting, BRB and Ending screens. */
+function SocialsEditor({ socials, update }: { socials: Socials; update: SceneUpdater }) {
+  const set = (patch: Partial<Socials>) => update((s) => ({ ...s, socials: { ...s.socials, ...patch } }));
+  const setLink = (id: (typeof SOCIAL_IDS)[number], value: string) =>
+    update((s) => ({ ...s, socials: { ...s.socials, links: { ...s.socials.links, [id]: value } } }));
+  const count = socialLinks(socials).length;
+  return (
+    <div className="col" style={{ gap: 8 }} data-testid="socials-editor">
+      <span className="body-medium">Social links on Starting, BRB and Ending</span>
+      <div className="field-pair">
+        {SOCIAL_IDS.map((id) => (
+          <TextField
+            key={id}
+            label={SOCIALS[id].name}
+            value={socials.links[id]}
+            onValue={(value) => setLink(id, value)}
+            maxLength={120}
+            placeholder={SOCIALS[id].placeholder}
+            data-testid={`social-${id}`}
+          />
+        ))}
+      </div>
+      <Switch label="Show links on these screens" selected={socials.show} onChange={(show) => set({ show })} data-testid="socials-show" />
+      <Switch label="QR codes viewers can scan" selected={socials.qr} onChange={(qr) => set({ qr })} data-testid="socials-qr" />
+      <p className="body-small muted">
+        Type a handle or paste a full link. {count === 0 ? 'Empty ones are left off.' : `${count} on screen.`} Codes
+        open the profile on a viewer's phone; with more than five links they get small, so keep the
+        ones that matter.
+      </p>
+    </div>
+  );
+}
+
 export function ScenesPanel({ scene, update, onOpenPage }: { scene: Scene; update: SceneUpdater; onOpenPage(): void }) {
   const template = TEMPLATES[scene.template];
   const setAuto = (patch: Partial<AutoDirector>) => update((s) => ({ ...s, auto: { ...s.auto, ...patch } }));
@@ -264,6 +301,7 @@ export function ScenesPanel({ scene, update, onOpenPage }: { scene: Scene; updat
           maxLength={80}
           placeholder="We start at 6 pm"
         />
+        <SocialsEditor socials={scene.socials} update={update} />
         <p className="body-small muted">
           Starting, BRB and Ending cover the stage and mute everyone for viewers. You can still talk
           to your guests. The countdown starts when the screen comes up; you go back to Live

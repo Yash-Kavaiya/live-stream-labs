@@ -151,7 +151,7 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 - **Camera backgrounds.** The arrow beside the camera button offers three strengths of blur, six
   built-in backgrounds, or your own picture, for the host and for guests. They are also in the
   green room. The segmentation model is downloaded from a CDN the first time one is used.
-- **A page per template.** News, Cricket and Party each have their own tab; a new broadcast can
+- **A page per template.** News, Class and Party each have their own tab; a new broadcast can
   start from any of them.
 - **Smooth transitions.** Tiles glide between layouts; people, banners, comments and holding
   screens fade in and out.
@@ -161,7 +161,8 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
   clock, headline and second line, story points and a ticker strip.
 - **Daily AI news rundown.** A full show written every day at 5 PM India time, run from the News
   tab with a teleprompter; see below.
-- **Cricket.** Follows a real match or is scored by hand; see below.
+- **Classroom.** Lecture, slides, whiteboard and quiz scenes for teaching, with a lesson plan that
+  shows where the class is; see below.
 - **Watch party.** A queue of video files and links, a now-playing bar, polls answered in chat,
   chat reactions with a hype meter, a scoreboard, and a winner celebration; see below.
 - **Holding screens.** Starting soon, Be right back, Thanks for watching. They silence the
@@ -183,35 +184,24 @@ credentials in `.env` (see `.env.example`). The redirect URL to register is
 - **Recording.** Every stream is recorded; watch, download or share a link.
 - **Themes.** Light, dark, or follow the system.
 
-## Cricket
+## Classroom
 
-Choose the **Cricket** template on the Scenes tab, then open the **Cricket** tab.
+Choose the **Classroom** template on the Scenes tab, then open the **Class** tab.
 
-A new cricket scene follows a live match: the India match if one is on, otherwise any live match.
-Pick another from the match list. The score refreshes every 5 seconds and goes out with the rest
-of the scene, so guests and the stream see what the host sees.
+Every scene has a header with the course and the lesson title, and a strip along the bottom with
+the parts of the lesson plan: finished parts are ticked and the current one is lit. Type the plan
+one part per line, then use **Back** and **Next** while you teach.
 
-| Layout | Cameras | Score |
+| Scene | Cameras | Main area |
 |---|---|---|
-| Strip | Your usual layout | A score strip along the bottom |
-| Corner | Fill the frame | A small score box in the top-left corner |
-| Split | Left side | A tall panel: score, batters, bowler, this over, runs per over |
-| Board | Column at the side | Both teams, the numbers, the crease, this over, runs per over |
-| Card | Column at the side | The batting card and the bowlers, with runs per over |
+| Lecture | The teacher, large | The lesson plan beside them; guests on stage take its place |
+| Slides | Column at the side | A shared screen, clip or image, as large as it fits |
+| Board | Column at the side | A whiteboard with your notes; a line starting with `- ` is a bullet |
+| Quiz | Column at the side | A question with up to four options, A to D |
 
-**Score by hand** switches to a ball-by-ball pad (runs, wickets, wides, no-balls) for a match the
-feed does not cover.
-
-**Moments** play a cartoon banner across the middle of the frame for about four seconds: FOUR, SIX,
-WICKET, FIFTY, HUNDRED and FREE HIT. They play by themselves as the score changes, live or scored
-by hand (a no-ball brings up FREE HIT; a batter passing 50 or 100 brings up the milestone), and the
-buttons on the Cricket tab play any of them by hand. Turn **Play moments automatically** off to
-keep only the buttons. **Your own banner** shows any words you type, or a ready-made one such as
-HAT-TRICK!, with an emoji and in the brand colour.
-
-The live score comes from ESPN's public cricket feed. It is free and needs no key, but it is not a
-documented API and could change or be blocked without notice. When it cannot be reached, the last
-score stays on screen and the Cricket tab says so. Only the host's browser talks to the feed.
+On the Quiz scene, pick the right answer and press **Reveal answer**: it turns green, the others
+fade, and a burst of 🎉 rises over the frame. **New question** clears the quiz. You can fill in the
+board and the quiz ahead of time; they only show on their own scenes.
 
 ## Daily AI news rundown
 
