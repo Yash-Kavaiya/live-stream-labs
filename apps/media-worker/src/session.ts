@@ -1,8 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { redactRtmpTarget, type EgressJob, type EgressStatus, type TargetStatus } from '@studio/shared';
-import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, isQueueOverflow, parseFailedOutput, parseProgress, parseUnopenedOutput, type TeeOutput } from './ffmpeg-args';
+import { redactRtmpTarget, type EgressJob, type EgressStatus } from '@studio/shared';
+import { buildFfmpegArgs, DEFAULT_ENCODE, isProgressLine, parseProgress, type EncodeSettings, type TeeOutput } from './ffmpeg-args';
+import { DestinationRelay, type RetryPolicy } from './relay';
 
 /** If ffmpeg cannot keep up, stop rather than buffer without bound. */
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
@@ -16,38 +17,39 @@ export interface SessionOptions {
   job: EgressJob;
   ffmpegPath: string;
   recordingsDir: string;
+  encode?: EncodeSettings;
+  retry?: RetryPolicy;
   onStatus(status: EgressStatus): void;
   log(message: string): void;
 }
 
 /**
- * One live broadcast: owns one ffmpeg process, feeds it the browser's stream and turns its log
- * into per-destination status.
+ * One live broadcast. One ffmpeg encodes the browser's stream once; its output goes to the
+ * recording and, as MPEG-TS, to one relay per platform. Each relay is its own process that
+ * reconnects by itself, so a platform that drops or slows down costs only that platform.
  */
 export class EgressSession {
   private readonly ffmpeg: ChildProcessWithoutNullStreams;
-  private readonly targets: TargetStatus[];
-  private readonly recordingFile: string | null;
+  private readonly relays: { destinationId: string; relay: DestinationRelay }[];
+  private readonly encode: EncodeSettings;
+  readonly recordingFile: string | null;
   private state: EgressStatus['state'] = 'starting';
   private stopping = false;
+  /** The encoder has exited and the relays are finishing. */
+  private closing = false;
   /** The session stopped itself because ffmpeg fell too far behind; the host is told why. */
   private overloaded = false;
   private lastError: string | null = null;
   private killTimer: NodeJS.Timeout | undefined;
   private lastHealthAt = Date.now();
-  private lastOverflowAt = 0;
   /** Last few non-progress log lines, printed when ffmpeg exits abnormally. */
   private readonly logTail: string[] = [];
   readonly done: Promise<void>;
 
   constructor(private readonly opts: SessionOptions) {
     const { job } = opts;
-    const outputs: TeeOutput[] = job.targets.map((t) => ({ format: 'flv', url: t.url }));
-    this.targets = job.targets.map((t) => ({
-      destinationId: t.destinationId,
-      status: 'connecting',
-      error: null,
-    }));
+    this.encode = opts.encode ?? DEFAULT_ENCODE;
+    const outputs: TeeOutput[] = [{ format: 'mpegts', url: 'pipe:1' }];
 
     this.recordingFile = job.record ? `${job.broadcastId}-${Date.now()}.mp4` : null;
     if (this.recordingFile) {
@@ -56,8 +58,23 @@ export class EgressSession {
     }
 
     opts.log(`starting ffmpeg -> ${job.targets.map((t) => redactRtmpTarget(t.url)).join(', ')}`);
-    this.ffmpeg = spawn(opts.ffmpegPath, buildFfmpegArgs(outputs), { stdio: 'pipe' });
+    this.ffmpeg = spawn(opts.ffmpegPath, buildFfmpegArgs(outputs, this.encode), { stdio: 'pipe' });
     this.ffmpeg.stdin.on('error', () => undefined); // EPIPE when ffmpeg exits first.
+
+    this.relays = job.targets.map((t) => ({
+      destinationId: t.destinationId,
+      relay: new DestinationRelay({
+        url: t.url,
+        ffmpegPath: opts.ffmpegPath,
+        retry: opts.retry,
+        onChange: () => this.emit(),
+        log: opts.log,
+      }),
+    }));
+    // The encoder is never held back by a platform: each relay buffers or restarts on its own.
+    this.ffmpeg.stdout.on('data', (chunk: Buffer) => {
+      for (const { relay } of this.relays) relay.write(chunk);
+    });
 
     let tail = '';
     this.ffmpeg.stderr.setEncoding('utf8').on('data', (chunk: string) => {
@@ -68,15 +85,21 @@ export class EgressSession {
     });
 
     this.done = new Promise((resolve) => {
+      const end = (code: number) => {
+        if (this.closing) return;
+        // The relays get what the encoder flushed, then end with it. Their own changes are not
+        // reported on the way: the final status below covers them.
+        this.closing = true;
+        void Promise.all(this.relays.map(({ relay }) => relay.stop())).then(() => {
+          this.finish(code);
+          resolve();
+        });
+      };
       this.ffmpeg.once('error', (err) => {
         this.lastError = `ffmpeg could not start: ${err.message}`;
-        this.finish(1);
-        resolve();
+        end(1);
       });
-      this.ffmpeg.once('close', (code) => {
-        this.finish(code ?? 1);
-        resolve();
-      });
+      this.ffmpeg.once('close', (code) => end(code ?? 1));
     });
     this.emit();
   }
@@ -111,32 +134,8 @@ export class EgressSession {
       this.logTail.push(line.trim());
       if (this.logTail.length > 12) this.logTail.shift();
     }
-    const unopened = parseUnopenedOutput(line);
-    const failed = unopened === null ? parseFailedOutput(line) : this.opts.job.targets.findIndex((t) => t.url === unopened);
-    if (failed !== null) {
-      const target = this.targets[failed];
-      // An index past the RTMP targets is the recording file.
-      if (target && target.status !== 'failed') {
-        target.status = 'failed';
-        target.error = 'The platform closed the connection or rejected the stream key';
-        this.opts.log(`target ${failed} failed: ${unopened === null ? line.trim() : `could not connect to ${redactRtmpTarget(unopened)}`}`);
-        this.emit();
-      }
-      return;
-    }
-    if (isQueueOverflow(line)) {
-      const now = Date.now();
-      if (now - this.lastOverflowAt >= HEALTH_EVERY_MS) {
-        this.lastOverflowAt = now;
-        this.opts.log('a destination is taking the stream too slowly and part of it was dropped there. The upload is too slow for this many destinations; the others are not affected.');
-      }
-      return;
-    }
     if (this.state === 'starting' && isProgressLine(line)) {
       this.state = 'live';
-      for (const target of this.targets) {
-        if (target.status === 'connecting') target.status = 'live';
-      }
       this.emit();
       return;
     }
@@ -158,7 +157,7 @@ export class EgressSession {
     const behind = progress.speed !== null && progress.speed < SLOW_SPEED;
     this.opts.log(
       behind
-        ? `encoder is behind: ${progress.fps} of ${DEFAULT_ENCODE.fps} frames a second, speed ${speed}. This computer or the incoming picture cannot keep up; viewers will see buffering.`
+        ? `encoder is behind: ${progress.fps} of ${this.encode.fps} frames a second, speed ${speed}. This computer or the incoming picture cannot keep up; viewers will see buffering.`
         : `encoder health: ${progress.fps} frames a second, speed ${speed}`,
     );
   }
@@ -171,11 +170,6 @@ export class EgressSession {
     // behind is a failure whenever it happens, so that the host hears the reason.
     const failed = this.overloaded || (!this.stopping && this.state === 'starting');
     this.state = failed ? 'failed' : 'ended';
-    for (const target of this.targets) {
-      if (target.status === 'failed') continue;
-      target.status = failed ? 'failed' : 'ended';
-      target.error = failed ? (this.lastError ?? `ffmpeg exited with code ${exitCode}`) : null;
-    }
     this.opts.log(`ffmpeg exited with code ${exitCode} (${this.state})`);
     if (exitCode !== 0) this.opts.log(`last ffmpeg output: ${this.logTail.join(' | ')}`);
     this.emit();
@@ -191,11 +185,26 @@ export class EgressSession {
     }
   }
 
+  private targets(): EgressStatus['targets'] {
+    const over = this.state === 'ended' || this.state === 'failed';
+    return this.relays.map(({ destinationId, relay }) => {
+      if (!over || relay.status === 'failed') return { destinationId, status: relay.status, error: relay.error };
+      // The encoder failing takes every platform with it, and the host is told why.
+      return this.state === 'failed'
+        ? { destinationId, status: 'failed', error: this.lastError ?? 'The stream could not be encoded' }
+        : { destinationId, status: 'ended', error: null };
+    });
+  }
+
   private emit(): void {
+    // The relays exist only once the constructor has made them.
+    if (!this.relays) return;
+    if (this.closing && this.state !== 'ended' && this.state !== 'failed') return;
     this.opts.onStatus({
       broadcastId: this.opts.job.broadcastId,
+      attempt: this.opts.job.attempt,
       state: this.state,
-      targets: this.targets.map((t) => ({ ...t })),
+      targets: this.targets(),
       error: this.state === 'failed' ? this.lastError : null,
       recording: this.recording(),
     });

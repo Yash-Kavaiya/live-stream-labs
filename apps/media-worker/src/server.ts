@@ -1,7 +1,12 @@
+import { createReadStream } from 'node:fs';
+import { stat, unlink } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { egressJobSchema, type EgressJob, type EgressStatus } from '@studio/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
+import type { EncodeSettings } from './ffmpeg-args';
+import type { RetryPolicy } from './relay';
 import { EgressSession } from './session';
 
 export interface WorkerConfig {
@@ -12,6 +17,14 @@ export interface WorkerConfig {
   ffmpegPath: string;
   /** How long a broadcast whose connection dropped waits for the host's browser to come back. */
   reconnectGraceMs?: number;
+  encode?: EncodeSettings;
+  /** How each platform is reconnected after it drops. */
+  retry?: RetryPolicy;
+  /**
+   * Send each finished recording to the API and delete the local copy. For deployments where the
+   * worker and the API do not share a disk (Render, Cloud Run).
+   */
+  uploadRecordings?: boolean;
 }
 
 const DEFAULT_RECONNECT_GRACE_MS = 30_000;
@@ -21,6 +34,8 @@ const HEARTBEAT_MS = 5_000;
 export interface ApiClient {
   claim(token: string): Promise<EgressJob | null>;
   report(status: EgressStatus): Promise<void>;
+  /** Hands a finished recording to the API. True once the API has stored it. */
+  uploadRecording?(file: string, filePath: string): Promise<boolean>;
 }
 
 export function httpApiClient(cfg: Pick<WorkerConfig, 'apiUrl' | 'internalSecret'>): ApiClient {
@@ -37,8 +52,23 @@ export function httpApiClient(cfg: Pick<WorkerConfig, 'apiUrl' | 'internalSecret
       return res.ok ? egressJobSchema.parse(await res.json()) : null;
     },
     async report(status) {
-      // Statuses are sent in order; a lost one is corrected by the next.
-      await post('/internal/egress/status', status).catch(() => undefined);
+      // Statuses are sent in order; a lost one is corrected by the next. A failed send is tried
+      // again a few times, so that a short API restart does not lose the end of a broadcast.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const res = await post('/internal/egress/status', status).catch(() => null);
+        if (res && res.status < 500) return;
+        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      }
+    },
+    async uploadRecording(file, filePath) {
+      const { size } = await stat(filePath);
+      const res = await fetch(`${cfg.apiUrl}/internal/recordings/${encodeURIComponent(file)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'video/mp4', 'content-length': String(size), 'x-internal-secret': cfg.internalSecret },
+        body: Readable.toWeb(createReadStream(filePath)) as ReadableStream,
+        duplex: 'half',
+      } as RequestInit);
+      return res.ok;
     },
   };
 }
@@ -126,6 +156,8 @@ export function startWorker(cfg: WorkerConfig, api: ApiClient = httpApiClient(cf
       job,
       ffmpegPath: cfg.ffmpegPath,
       recordingsDir: path.join(cfg.dataDir, 'recordings'),
+      encode: cfg.encode,
+      retry: cfg.retry,
       log: (message) => log(`${job.broadcastId} ${message}`),
       onStatus: (status) => {
         const over = status.state === 'ended' || status.state === 'failed';
@@ -170,7 +202,26 @@ export function startWorker(cfg: WorkerConfig, api: ApiClient = httpApiClient(cf
     await session.done;
     if (sessions.get(job.broadcastId) === entry) sessions.delete(job.broadcastId);
     if (socket.readyState === socket.OPEN) socket.close(CLOSE_ENDED, 'The streaming server ended the stream');
+    if (cfg.uploadRecordings && session.recordingFile && api.uploadRecording) {
+      void uploadRecording(session.recordingFile);
+    }
   });
+
+  /** Moves a recording to the API, retrying for a few minutes; the local copy stays until it is safe. */
+  async function uploadRecording(file: string): Promise<void> {
+    const filePath = path.join(cfg.dataDir, 'recordings', file);
+    if (!(await stat(filePath).catch(() => null))?.size) return;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const ok = await api.uploadRecording!(file, filePath).catch(() => false);
+      if (ok) {
+        await unlink(filePath).catch(() => undefined);
+        log(`recording ${file} handed to the API`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 2_000 * 2 ** attempt));
+    }
+    log(`recording ${file} could not be handed to the API; it stays on this worker`);
+  }
 
   // A connection whose network died never closes by itself; one that misses a ping is let go.
   const heartbeat = setInterval(() => {
