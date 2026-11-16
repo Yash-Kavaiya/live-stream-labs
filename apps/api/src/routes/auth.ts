@@ -30,6 +30,7 @@ export function authRoutes(app: FastifyInstance, deps: Deps): void {
         facebook: has('facebook'),
       },
       egressMode: deps.egress.mode,
+      livekitServerDefault: !!config.livekit,
     };
   });
 

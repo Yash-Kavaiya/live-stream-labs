@@ -37,6 +37,14 @@ The same picture as a Mermaid diagram is in the [README](../README.md#architectu
 
 ## Key decisions
 
+**Each account can bring its own LiveKit project.** The server's `LIVEKIT_*` values are optional.
+An account can save a LiveKit Cloud URL, key and secret under Settings: the API calls LiveKit once
+to check them, seals the secret with `ENCRYPTION_KEY` (table `livekit_settings`) and never returns
+it. Every LiveKit call for a broadcast (tokens for the host and guests, room metadata, data
+messages) goes to its owner's project, so a guest always lands in the same project as the host
+(`apps/api/src/services/livekit-settings.ts`). In `livekit` egress mode, which runs in the
+server's project, accounts cannot override it.
+
 **The scene is one document.** Layout, who is on stage, banners and brand live in one zod-validated
 JSON object (`packages/shared/src/scene.ts`). The API is its only writer: it saves it and publishes
 it as LiveKit room metadata, so every client sees the same scene without a separate realtime

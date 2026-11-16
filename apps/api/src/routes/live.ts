@@ -174,9 +174,10 @@ export function liveRoutes(app: FastifyInstance, deps: Deps): void {
 
   // --- LiveKit Egress webhook (livekit mode). The signature is checked against the API secret. ---
 
-  const receiver = new WebhookReceiver(config.livekit.apiKey, config.livekit.apiSecret);
+  const receiver = config.livekit && new WebhookReceiver(config.livekit.apiKey, config.livekit.apiSecret);
 
   app.post('/api/livekit/webhook', async (req) => {
+    if (!receiver) return { ok: true };
     const event = await receiver
       .receive(req.body as string, req.headers.authorization)
       .catch(() => null);

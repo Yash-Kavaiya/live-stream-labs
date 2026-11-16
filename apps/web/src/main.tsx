@@ -7,6 +7,7 @@ import { AppProviders } from './lib/app-context';
 import { AppShell, BroadcastsPage, DestinationsPage, RecordingsPage } from './pages/dashboard';
 import { AuthPage, Landing, WatchPage } from './pages/public';
 import { RundownPage } from './pages/rundown-page';
+import { SettingsPage } from './pages/settings';
 import { GuestJoinPage, HostStudioPage, RenderPage } from './pages/studio-pages';
 
 // StrictMode is left off on purpose: its double-mounted effects would join the LiveKit room twice.
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
           <Route index element={<BroadcastsPage />} />
           <Route path="destinations" element={<DestinationsPage />} />
           <Route path="recordings" element={<RecordingsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="/studio/:id" element={<HostStudioPage />} />
         <Route path="/join/:token" element={<GuestJoinPage />} />

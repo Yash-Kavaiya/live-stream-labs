@@ -66,6 +66,7 @@ export class LiveKitEgress implements EgressProvider {
   private readonly client: EgressClient;
 
   constructor(private readonly config: Config) {
+    if (!config.livekit) throw new Error('EGRESS_MODE=livekit needs LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET');
     const { url, apiKey, apiSecret } = config.livekit;
     this.client = new EgressClient(url.replace(/^ws/, 'http'), apiKey, apiSecret);
   }

@@ -6,6 +6,8 @@ import type {
   DestinationDto,
   GoLiveResult,
   InviteDto,
+  LiveKitSettingsDto,
+  LiveKitSettingsInput,
   LoginInput,
   RecordingDto,
   Rundown,
@@ -53,6 +55,10 @@ export const api = {
   signup: (input: SignupInput) => post<UserDto>('/api/auth/signup', input),
   login: (input: LoginInput) => post<UserDto>('/api/auth/login', input),
   logout: () => post<{ ok: true }>('/api/auth/logout'),
+
+  livekitSettings: () => get<LiveKitSettingsDto>('/api/settings/livekit'),
+  saveLivekitSettings: (input: LiveKitSettingsInput) => request<LiveKitSettingsDto>('PUT', '/api/settings/livekit', input),
+  deleteLivekitSettings: () => request<LiveKitSettingsDto>('DELETE', '/api/settings/livekit'),
 
   destinations: () => get<DestinationDto[]>('/api/destinations'),
   createDestination: (input: CreateDestinationInput) => post<DestinationDto>('/api/destinations', input),

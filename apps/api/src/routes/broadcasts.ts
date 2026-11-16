@@ -22,11 +22,12 @@ import {
   toBroadcastDtos,
 } from '../services/broadcasts';
 import { roomName } from '../services/livekit';
+import { livekitFor, livekitForBroadcast } from '../services/livekit-settings';
 
 const INVITE_DAYS = 7;
 
 export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
-  const { db, livekit, config } = deps;
+  const { db, config } = deps;
 
   const one = async (row: BroadcastRow) => (await toBroadcastDtos(deps, [row]))[0]!;
 
@@ -39,12 +40,14 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
     const room = roomName(broadcast.id);
     // Scenes saved by an older version lack newer fields; fill them in before anyone reads it.
     const scene = normalizeScene(broadcast.scene);
-    await livekit.ensureRoom(room, JSON.stringify(scene));
+    // The owner's LiveKit project, guests included: everyone must meet in the same room.
+    const { url, gateway } = await livekitFor(deps, broadcast.userId);
+    await gateway.ensureRoom(room, JSON.stringify(scene));
     return {
       role,
       identity,
-      livekitUrl: config.livekit.url,
-      token: await livekit.createToken({ room, identity, name, role }),
+      livekitUrl: url,
+      token: await gateway.createToken({ room, identity, name, role }),
       broadcast: { id: broadcast.id, title: broadcast.title, status: broadcast.status },
       scene,
     };
@@ -124,7 +127,9 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
     const broadcast = await getOwnedBroadcast(deps, userId, (req.params as { id: string }).id);
     const { scene } = parse(updateSceneSchema, req.body);
     await db.update(broadcasts).set({ scene }).where(eq(broadcasts.id, broadcast.id));
-    await livekit.setRoomMetadata(roomName(broadcast.id), JSON.stringify(scene));
+    // A studio nobody has opened yet needs no LiveKit project: the scene is read from the database.
+    const target = await livekitForBroadcast(deps, broadcast.id);
+    await target?.gateway.setRoomMetadata(roomName(broadcast.id), JSON.stringify(scene));
     return { scene };
   });
 
@@ -132,7 +137,7 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
     const userId = await requireUserId(deps, req);
     const { id, identity } = req.params as { id: string; identity: string };
     const broadcast = await getOwnedBroadcast(deps, userId, id);
-    await livekit.removeParticipant(roomName(broadcast.id), identity);
+    await (await livekitFor(deps, userId)).gateway.removeParticipant(roomName(broadcast.id), identity);
     return { ok: true };
   });
 
@@ -141,7 +146,7 @@ export function broadcastRoutes(app: FastifyInstance, deps: Deps): void {
     const { id, identity } = req.params as { id: string; identity: string };
     const { trackSid } = parse(z.object({ trackSid: z.string().min(1) }), req.body);
     const broadcast = await getOwnedBroadcast(deps, userId, id);
-    await livekit.muteTrack(roomName(broadcast.id), identity, trackSid);
+    await (await livekitFor(deps, userId)).gateway.muteTrack(roomName(broadcast.id), identity, trackSid);
     return { ok: true };
   });
 

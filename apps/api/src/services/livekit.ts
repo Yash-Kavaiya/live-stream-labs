@@ -1,5 +1,6 @@
 import type { ParticipantMeta, StudioRole } from '@studio/shared';
 import { encodeJson } from '@studio/shared';
+import type { LiveKitCredentials } from '../config';
 import { AccessToken, DataPacket_Kind, RoomServiceClient, TwirpError } from 'livekit-server-sdk';
 
 export interface TokenRequest {
@@ -17,7 +18,12 @@ export interface LiveKitGateway {
   sendData(room: string, topic: string, payload: unknown): Promise<void>;
   removeParticipant(room: string, identity: string): Promise<void>;
   muteTrack(room: string, identity: string, trackSid: string): Promise<void>;
+  /** Makes one authenticated call, so wrong credentials are caught when they are saved. */
+  verify(): Promise<void>;
 }
+
+/** Builds a gateway for one LiveKit project: the server's, or an account's own. */
+export type LiveKitFactory = (credentials: LiveKitCredentials) => LiveKitGateway;
 
 export function roomName(broadcastId: string): string {
   return `b_${broadcastId}`;
@@ -30,7 +36,7 @@ function isNotFound(err: unknown): boolean {
 export class LiveKitService implements LiveKitGateway {
   private readonly rooms: RoomServiceClient;
 
-  constructor(private readonly cfg: { url: string; apiKey: string; apiSecret: string }) {
+  constructor(private readonly cfg: LiveKitCredentials) {
     const httpUrl = cfg.url.replace(/^ws/, 'http');
     this.rooms = new RoomServiceClient(httpUrl, cfg.apiKey, cfg.apiSecret);
   }
@@ -83,6 +89,10 @@ export class LiveKitService implements LiveKitGateway {
   async muteTrack(room: string, identity: string, trackSid: string): Promise<void> {
     await this.rooms.mutePublishedTrack(room, identity, trackSid, true);
   }
+
+  async verify(): Promise<void> {
+    await this.rooms.listRooms();
+  }
 }
 
 /** In-memory stand-in that records calls. */
@@ -91,6 +101,10 @@ export class FakeLiveKit implements LiveKitGateway {
   readonly sent: { room: string; topic: string; payload: unknown }[] = [];
   readonly removed: string[] = [];
   readonly muted: string[] = [];
+  /** Set to make `verify` fail, as LiveKit does for a wrong key or secret. */
+  rejectCredentials = false;
+  /** Every project a gateway was made for, in order. */
+  readonly credentials: LiveKitCredentials[] = [];
 
   async createToken(req: TokenRequest): Promise<string> {
     return `fake.${req.role}.${req.identity}`;
@@ -109,5 +123,8 @@ export class FakeLiveKit implements LiveKitGateway {
   }
   async muteTrack(_room: string, _identity: string, trackSid: string): Promise<void> {
     this.muted.push(trackSid);
+  }
+  async verify(): Promise<void> {
+    if (this.rejectCredentials) throw new Error('invalid API key');
   }
 }

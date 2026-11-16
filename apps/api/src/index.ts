@@ -27,7 +27,7 @@ const app = await buildApp({
   db,
   signer,
   box: new SecretBox(config.encryptionKey),
-  livekit: new LiveKitService(config.livekit),
+  livekitFactory: (credentials) => new LiveKitService(credentials),
   egress: createEgressProvider(config, signer),
   adapterFor: createAdapterResolver(config),
   fetch,

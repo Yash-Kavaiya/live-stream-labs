@@ -19,6 +19,7 @@ import {
 import type { DestinationContext } from '../destinations/types';
 import { notFound, type Deps } from '../http/context';
 import { roomName } from './livekit';
+import { livekitForBroadcast } from './livekit-settings';
 
 function rtmpHost(url: string | null): string | null {
   if (!url) return null;
@@ -219,6 +220,7 @@ export async function applyEgressStatus(deps: Deps, status: EgressStatus): Promi
     await finishBroadcast(deps, broadcastId);
   }
 
-  await deps.livekit.sendData(roomName(broadcastId), TOPIC_EGRESS, status);
+  const target = await livekitForBroadcast(deps, broadcastId);
+  await target?.gateway.sendData(roomName(broadcastId), TOPIC_EGRESS, status);
   return true;
 }
