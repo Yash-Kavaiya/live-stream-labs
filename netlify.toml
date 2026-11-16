@@ -10,11 +10,15 @@
 
 [build]
   base = "."
-  command = "npm ci && npm run build -w @studio/web && node scripts/netlify-redirects.mjs"
+  # Netlify installs the dependencies itself before this runs.
+  command = "npm run build -w @studio/web && node scripts/netlify-redirects.mjs"
   publish = "apps/web/dist"
 
 [build.environment]
   NODE_VERSION = "22"
+  # The API on Cloud Run (deploy.yml). Not a secret: Cloud Run derives the address from the
+  # service name, project number and region. /api and /assets are proxied to it.
+  BACKEND_URL = "https://studio-api-443180956629.asia-south1.run.app"
 
 # Built files have a content hash in their name and never change.
 [[headers]]

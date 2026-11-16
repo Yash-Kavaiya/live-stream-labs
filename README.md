@@ -410,9 +410,12 @@ Actions tab ──► Deploy backend: checks ─► build api + worker images �
 
 **First-time setup**
 
-1. **Netlify site.** In Netlify, *Add new site → Deploy manually* (or import the repository and
-   turn off its own builds: GitHub Actions deploys). Note the **Site ID** (*Site configuration →
-   Site details*) and create a **personal access token** (*User settings → Applications*).
+1. **Netlify site.** Either way works; pick one, so the site is not deployed twice:
+   - *Import from Git* in Netlify: Netlify builds `main` and pull-request previews itself from
+     `netlify.toml`, which already sets `BACKEND_URL`. Nothing else to configure; or
+   - *Deploy manually*, then let GitHub Actions deploy after the checks pass: add secrets
+     `NETLIFY_AUTH_TOKEN` (*User settings → Applications*) and `NETLIFY_SITE_ID` (*Site
+     configuration → Site details*).
 2. **Backend.** In GitHub, *Settings → Secrets and variables → Actions*:
    - secrets `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_SECRET` (32+ random characters each);
    - variable `WEB_ORIGIN` = the Netlify address, e.g. `https://omnicast-studio.netlify.app`;
@@ -422,10 +425,9 @@ Actions tab ──► Deploy backend: checks ─► build api + worker images �
 
    Then *Actions → Deploy backend to Cloud Run → Run workflow*. The run summary prints the API
    address.
-3. **Netlify deploy.** Add secrets `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` and variable
-   `BACKEND_URL` = the API address from step 2. The next push to `main` deploys the web app (or
-   run *Actions → CI/CD → Run workflow*). Until these are set, CI/CD runs the checks and skips the
-   deploy with a note.
+3. **Netlify deploy.** The next push to `main` deploys the web app. `/api` reaches the API only
+   once step 2 has run. If the API lives elsewhere, change `BACKEND_URL` in `netlify.toml` (or set
+   the `BACKEND_URL` repository variable for the Actions deploy).
 4. **LiveKit.** Either set the `LIVEKIT_*` values in step 2, or sign up on the site, open
    **Settings** and paste your LiveKit Cloud URL, API key and API secret, then **Test and save**.
    The API checks them with LiveKit, keeps the secret encrypted and never sends it to a browser.
@@ -445,7 +447,7 @@ instance takes any show, and a reconnect may move a show between instances safel
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | api | Optional. The server's LiveKit project for cameras, guests and the data channel; accounts without their own (Settings) use it |
 | `WEB_ORIGIN` | api | The Netlify site's address |
 | `PUBLIC_INGEST_URL` | api | The worker's `wss://…/ingest` address (set by `deploy.yml`) |
-| `BACKEND_URL` | Netlify build | The API's https address; `/api` and `/assets` are proxied to it |
+| `BACKEND_URL` | Netlify build (`netlify.toml`) | The API's https address; `/api` and `/assets` are proxied to it |
 | `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_SECRET` | api (worker reads `INTERNAL_SECRET`) | 32+ random characters each |
 | `DATABASE_URL` | api | Postgres; without it, an embedded database inside the container |
 | `ENCODE_WIDTH`, `ENCODE_HEIGHT`, `ENCODE_FPS`, `ENCODE_VIDEO_KBPS`, `ENCODE_AUDIO_KBPS` | worker | The one encode every platform gets |

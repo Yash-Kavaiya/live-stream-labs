@@ -9,8 +9,10 @@
 # Repository settings (Settings → Secrets and variables → Actions):
 #   secret   NETLIFY_AUTH_TOKEN  Netlify → User settings → Applications → Personal access tokens
 #   secret   NETLIFY_SITE_ID     Netlify → Site configuration → Site details → Site ID
-#   variable BACKEND_URL         https origin of the API, e.g. https://studio-api-<number>.asia-south1.run.app
-# Until they are set, the deploy job is skipped with a note and the checks still run.
+#   variable BACKEND_URL         optional; defaults to the Cloud Run API address in netlify.toml
+# Until the secrets are set, the deploy job is skipped with a note and the checks still run.
+# (If the site is instead linked to the repository in Netlify, Netlify builds it from
+# netlify.toml by itself; then leave these secrets unset so the site is not deployed twice.)
 name: CI/CD
 
 on:
@@ -57,13 +59,14 @@ jobs:
     env:
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-      BACKEND_URL: ${{ vars.BACKEND_URL }}
+      # Same default as netlify.toml; the BACKEND_URL variable overrides it.
+      BACKEND_URL: ${{ vars.BACKEND_URL || 'https://studio-api-443180956629.asia-south1.run.app' }}
     steps:
       - name: Check the Netlify settings
         id: ready
         run: |
-          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ] || [ -z "$BACKEND_URL" ]; then
-            echo "::notice::Netlify deploy skipped: set the NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID secrets and the BACKEND_URL variable."
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::notice::Netlify deploy from Actions skipped: set the NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID secrets."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
