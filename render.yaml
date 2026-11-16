@@ -1,12 +1,13 @@
 # OmniCast Studio on Render: one Blueprint creates the whole stack.
 #
-#   Render dashboard → New → Blueprint → pick this repository → enter the three LIVEKIT_* values.
+#   Render dashboard → New → Blueprint → pick this repository → enter the three LIVEKIT_* values,
+#   or leave them empty and add the LiveKit project in the app under Settings after signing up.
 #
 # Only omnicast-web is public. The API and the media worker are private services, reached over
 # Render's private network through the web service's proxy (infra/Caddyfile.cloudrun).
 #
 # LiveKit (cameras, guests) cannot run on Render, which has no UDP ports for WebRTC: use a LiveKit
-# Cloud project (https://cloud.livekit.io) and paste its URL, API key and secret when asked.
+# Cloud project (https://cloud.livekit.io) and paste its URL, API key and secret, here or in the app.
 #
 # If Render gives the web service a different address than https://omnicast-web.onrender.com
 # (the name was taken), change WEB_ORIGIN and PUBLIC_INGEST_URL on omnicast-api to match.
@@ -66,6 +67,7 @@ services:
         generateValue: true
       - key: INTERNAL_SECRET
         generateValue: true
+      # Optional: an account's own project, saved in Settings, takes precedence.
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY

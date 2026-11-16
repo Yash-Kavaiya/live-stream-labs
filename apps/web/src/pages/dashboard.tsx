@@ -22,6 +22,7 @@ const NAV = [
   { to: '/app', end: true, icon: 'videocam', label: 'Broadcasts' },
   { to: '/app/destinations', end: false, icon: 'cell_tower', label: 'Destinations' },
   { to: '/app/recordings', end: false, icon: 'video_library', label: 'Recordings' },
+  { to: '/app/settings', end: false, icon: 'settings', label: 'Settings' },
 ];
 
 /** Signed-in shell: M3 navigation rail on wide screens, navigation bar on narrow ones. */

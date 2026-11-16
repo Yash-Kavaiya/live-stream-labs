@@ -30,7 +30,10 @@ export function HostStudioPage() {
       <Centered>
         <div className="col center">
           <p className="title-large">{session.error}</p>
-          <LinkButton variant="tonal" to="/app">Back to dashboard</LinkButton>
+          <div className="row wrap">
+            {/LiveKit/.test(session.error) && <LinkButton icon="settings" to="/app/settings">Open Settings</LinkButton>}
+            <LinkButton variant="tonal" to="/app">Back to dashboard</LinkButton>
+          </div>
         </div>
       </Centered>
     );

@@ -13,6 +13,18 @@ export const users = pgTable('users', {
   createdAt: createdAt(),
 });
 
+/** An account's own LiveKit project (e.g. LiveKit Cloud), used instead of the server's. */
+export const livekitSettings = pgTable('livekit_settings', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  apiKey: text('api_key').notNull(),
+  /** Sealed API secret. */
+  secretEnc: text('secret_enc').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const destinations = pgTable('destinations', {
   id: text('id').primaryKey(),
   userId: text('user_id')

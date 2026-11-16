@@ -23,9 +23,11 @@ const envSchema = z.object({
   DATABASE_URL: optional,
   DATA_DIR: z.string().default('.data'),
 
-  LIVEKIT_URL: z.string().default('ws://localhost:7880'),
-  LIVEKIT_API_KEY: z.string().default('devkey'),
-  LIVEKIT_API_SECRET: z.string().default('secret'),
+  // Optional: without them, each account adds its own LiveKit project in Settings. In development
+  // they default to the local server from `npm run dev`.
+  LIVEKIT_URL: optional,
+  LIVEKIT_API_KEY: optional,
+  LIVEKIT_API_SECRET: optional,
 
   EGRESS_MODE: z.enum(['relay', 'livekit']).default('relay'),
 
@@ -50,6 +52,12 @@ const envSchema = z.object({
   NEWS_FIXTURE: optional,
 });
 
+export interface LiveKitCredentials {
+  url: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
 export interface OAuthApp {
   clientId: string;
   clientSecret: string;
@@ -65,7 +73,8 @@ export interface Config {
   internalSecret: string;
   databaseUrl: string | undefined;
   dataDir: string;
-  livekit: { url: string; apiKey: string; apiSecret: string };
+  /** The server's own LiveKit project, if it has one. Accounts can use their own (Settings). */
+  livekit: LiveKitCredentials | undefined;
   egressMode: 'relay' | 'livekit';
   oauth: { google?: OAuthApp; twitch?: OAuthApp; facebook?: OAuthApp };
   news: NewsConfig;
@@ -80,6 +89,16 @@ export interface NewsConfig {
   geminiModel: string;
   show: Show;
   fixture: boolean;
+}
+
+function serverLiveKit(env: z.infer<typeof envSchema>): LiveKitCredentials | undefined {
+  const { LIVEKIT_URL: url, LIVEKIT_API_KEY: apiKey, LIVEKIT_API_SECRET: apiSecret } = env;
+  if (url && apiKey && apiSecret) return { url, apiKey, apiSecret };
+  if (url || apiKey || apiSecret) {
+    throw new Error('Set all three of LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET, or none');
+  }
+  // The local LiveKit server that `npm run dev` starts.
+  return env.NODE_ENV === 'production' ? undefined : { url: 'ws://localhost:7880', apiKey: 'devkey', apiSecret: 'secret' };
 }
 
 function oauthApp(clientId?: string, clientSecret?: string): OAuthApp | undefined {
@@ -119,7 +138,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     internalSecret: secret('INTERNAL_SECRET'),
     databaseUrl: env.DATABASE_URL,
     dataDir: path.resolve(env.DATA_DIR),
-    livekit: { url: env.LIVEKIT_URL, apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET },
+    livekit: serverLiveKit(env),
     egressMode: env.EGRESS_MODE,
     oauth: {
       google: oauthApp(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),

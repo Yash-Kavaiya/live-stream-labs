@@ -143,6 +143,31 @@ export interface CommentDto {
 export interface ServerConfigDto {
   oauth: { google: boolean; youtube: boolean; twitch: boolean; facebook: boolean };
   egressMode: 'relay' | 'livekit';
+  /** The server has its own LiveKit project; an account may still use its own instead. */
+  livekitServerDefault: boolean;
+}
+
+// ---------- LiveKit project (cameras and guests) ----------
+
+export const livekitSettingsSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .regex(/^(wss?|https?):\/\/[^\s/]+(\/[^\s]*)?$/, 'Must start with wss:// (for example wss://my-project.livekit.cloud)')
+    .max(300)
+    .transform((url) => url.replace(/^http/, 'ws').replace(/\/+$/, '')),
+  apiKey: z.string().trim().min(1, 'Enter the API key').max(200),
+  apiSecret: z.string().trim().min(1, 'Enter the API secret').max(500),
+});
+export type LiveKitSettingsInput = z.input<typeof livekitSettingsSchema>;
+
+/** Which LiveKit project this account's studios use. The secret never leaves the server. */
+export interface LiveKitSettingsDto {
+  /** account: saved in Settings. server: the server's own project. none: neither, so the studio cannot open. */
+  source: 'account' | 'server' | 'none';
+  url: string | null;
+  apiKey: string | null;
+  updatedAt: string | null;
 }
 
 export interface ApiError {

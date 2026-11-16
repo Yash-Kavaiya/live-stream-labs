@@ -15,6 +15,7 @@ import { dbStore, RundownService } from './news/service';
 import type { Collected } from './news/sources';
 import { createWriter, type Writer } from './news/writer';
 import { FakeLiveKit } from './services/livekit';
+import { clearLiveKitCache } from './services/livekit-settings';
 
 export interface TestApp {
   app: FastifyInstance;
@@ -35,6 +36,7 @@ export async function createTestApp(
   const { db, close } = await openDb({});
   const signer = new TokenSigner(config.sessionSecret);
   const livekit = new FakeLiveKit();
+  clearLiveKitCache();
   const fetchFn: Fetch =
     opts.fetch ??
     (async () => {
@@ -44,7 +46,10 @@ export async function createTestApp(
     config,
     db,
     signer,
-    livekit,
+    livekitFactory: (credentials) => {
+      livekit.credentials.push(credentials);
+      return livekit;
+    },
     box: new SecretBox(config.encryptionKey),
     egress: new RelayEgress(signer, config.publicIngestUrl),
     adapterFor: createAdapterResolver(config),

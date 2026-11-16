@@ -7,7 +7,7 @@ import type { AdapterResolver } from '../destinations/adapters';
 import type { Fetch } from '../destinations/types';
 import type { EgressProvider } from '../egress/providers';
 import type { RundownService } from '../news/service';
-import type { LiveKitGateway } from '../services/livekit';
+import type { LiveKitFactory } from '../services/livekit';
 
 /** Everything a route needs. Built once in `index.ts`; tests pass fakes. */
 export interface Deps {
@@ -15,7 +15,8 @@ export interface Deps {
   db: Db;
   box: SecretBox;
   signer: TokenSigner;
-  livekit: LiveKitGateway;
+  /** Connects to a LiveKit project: the server's, or the one an account saved in Settings. */
+  livekitFactory: LiveKitFactory;
   egress: EgressProvider;
   adapterFor: AdapterResolver;
   fetch: Fetch;
