@@ -1,6 +1,6 @@
 # Architecture
 
-StreamLabs Studio is a browser studio that composes one program (people, screens, overlays) and
+OmniCast Studio is a browser studio that composes one program (people, screens, overlays) and
 sends it to several live platforms at once.
 
 ```
@@ -12,11 +12,17 @@ sends it to several live platforms at once.
  └───┬──────────────┬───┘   + data   ┌────┴─────┐      ┌────────────┐
      │ HTTPS /api   │ WS /ingest     │   API    │◄────►│ Postgres   │
      ▼              ▼                │ (Fastify)│      └────────────┘
- ┌────────┐   ┌──────────────┐ claim └────┬─────┘
- │ Caddy  │──►│ Media worker │◄───────────┘ status
- └────────┘   │   ffmpeg     │──── RTMP(S) ───► YouTube · Twitch · Facebook · LinkedIn · X · Instagram
-              └──────────────┘──── MP4 ───────► recordings volume
+ ┌────────┐   ┌────────────────────────┐ claim └────┬─────┘
+ │ Caddy  │──►│ Media worker           │◄───────────┘ status (+ attempt)
+ └────────┘   │  encoder ffmpeg (once) │──── MP4 ──────► recording → API disk
+              │    │ MPEG-TS           │
+              │    ├► relay ffmpeg ────┼── RTMP(S) ───► YouTube
+              │    ├► relay ffmpeg ────┼── RTMP(S) ───► Twitch
+              │    └► relay ffmpeg ────┼── RTMP(S) ───► Facebook · LinkedIn · X · Instagram …
+              └────────────────────────┘
 ```
+
+The same picture as a Mermaid diagram is in the [README](../README.md#architecture).
 
 ## Components
 
@@ -24,7 +30,7 @@ sends it to several live platforms at once.
 |---|---|---|---|
 | Web | `apps/web` | React 19 + Vite. Studio, guest join, dashboard, `/render` | none |
 | API | `apps/api` | Fastify. Auth, destinations, broadcasts, invites, scene, go-live | Postgres |
-| Media worker | `apps/media-worker` | WebSocket ingest, one ffmpeg per live broadcast | none (files on a volume) |
+| Media worker | `apps/media-worker` | WebSocket ingest; one encoder per live broadcast plus one copy-only relay per platform | none (recordings handed to the API) |
 | Shared | `packages/shared` | zod schemas, scene model, layout engine | n/a |
 | UI | `packages/ui` | Material 3 tokens and typed wrappers over `@material/web` | n/a |
 | LiveKit | external | WebRTC SFU for realtime media and data | Redis when clustered |
@@ -58,8 +64,10 @@ scoring is a pure reducer (`recordBall` in `packages/shared/src/cricket.ts`).
 **Egress is an interface with two implementations** (`apps/api/src/egress/providers.ts`):
 
 - `relay` (default). The host's browser records the canvas and the audio mix with MediaRecorder
-  and streams the chunks over a WebSocket to a media worker. ffmpeg transcodes once to H.264 + AAC
-  and the `tee` muxer copies that to every destination and to an MP4 file. Frames are pushed into
+  and streams the chunks over a WebSocket to a media worker. One ffmpeg transcodes once to H.264 +
+  AAC and writes MPEG-TS to its stdout and an MP4 recording. Node copies the MPEG-TS to one relay
+  per platform: an ffmpeg with `-c copy` that pushes FLV over RTMP(S) and reconnects on its own
+  (see Fault tolerance). Frames are pushed into
   the stream on a Worker timer (`MediaStreamTrackGenerator`), not with `canvas.captureStream()`,
   which only emits frames while the page is painting and starves the encoder otherwise.
   Trade-off: the stream depends on the host's tab and upload; closing the tab ends it.
@@ -84,6 +92,23 @@ database and never go to a browser. The media worker gets the full RTMP URLs by 
 short-lived signed ingest token over an internal endpoint guarded by `INTERNAL_SECRET`. Passwords
 use scrypt. Invite links store only a SHA-256 hash of the token.
 
+## Fault tolerance
+
+A live show has to survive any one platform, network or process failing. What happens in each case:
+
+| What fails | What happens | Where |
+|---|---|---|
+| One platform drops or refuses mid-show | Only that platform's relay exits. It is restarted after 1 s, 2 s, 4 s … up to 30 s, for as long as the show is live, and shows "Reconnecting (attempt n)". Every other platform and the recording carry on untouched. | `apps/media-worker/src/relay.ts` |
+| A stream key is wrong | The relay never gets through; after 5 tries in a row it is marked failed with the reason. The other platforms are not affected. | `relay.ts` |
+| A platform takes the stream too slowly | Its relay's backlog passes ~8 MB (~10 s) and only that relay is restarted, so it catches up from live. The encoder is never held back. | `relay.ts` |
+| The host's network blips | The browser notices (WebSocket close, or nothing leaving the send buffer for 10 s) and reconnects for up to 25 s; the worker holds the platforms open for 30 s. | `apps/web/src/studio/broadcaster.ts`, `reconnect.ts`, `apps/media-worker/src/server.ts` |
+| A worker restarts or is redeployed | It closes ingest connections with code 1012; browsers reconnect, through the proxy, to a healthy instance. | `server.ts`, `index.ts` |
+| The reconnect lands on another worker instance | Every claim of the ingest token raises the session's `attempt`; the API ignores status from an older attempt, so the old worker's "ended" cannot stop the show. | `apps/api/src/routes/live.ts`, `services/broadcasts.ts` |
+| The API restarts | The worker retries each status report with backoff, and the recording hand-over for minutes. | `server.ts` |
+| Postgres drops a connection | The pool logs it and reconnects on the next query; `/api/health` answers 503 while the database cannot be reached. | `apps/api/src/db/client.ts`, `app.ts` |
+| Several API instances start together | Migrations run under an advisory lock, and only the instance holding the `daily-rundown` lock makes the rundown. | `db/client.ts`, `news/schedule.ts` |
+| The encoder itself cannot keep up | The session stops with a clear reason rather than drifting minutes behind; the browser can go live again. | `apps/media-worker/src/session.ts` |
+
 **No app-level queue.** The plan sketched a Redis job queue between API and workers. It turned out
 not to be needed: in relay mode the worker that receives the WebSocket is the one that must do the
 work, and in livekit mode LiveKit Egress has its own queue. Status flows worker → API over HTTP and
@@ -96,8 +121,7 @@ asks a model for the show in two calls (stories, then segments) and turns the an
 makes one at a time. Three rules keep model output safe to put on air: the model cites items by
 number and never types a URL, every string is cut to the limit of the scene field it will fill,
 and a segment the model leaves out is filled from the collected items. With several API replicas
-each would run the schedule; the upsert by date makes that wasteful, not wrong. Move the timer to
-one replica or a cron job before scaling out.
+only the one holding a Postgres advisory lock runs the schedule.
 
 **The watch party is scene state plus two things only the host has.** `scene.party` holds the
 queue, what is playing, the poll, the scores, the hype level and the latest burst of reactions, and
@@ -120,26 +144,23 @@ Only the list of uploaded tracks is saved with the broadcast.
 |---|---|---|
 | Web | static files behind a CDN | none |
 | API | stateless; add replicas behind the proxy | Postgres |
-| Media worker | stateless; add replicas. One live broadcast ≈ one ffmpeg ≈ 2–4 CPU cores at 1080p30 | CPU; autoscale on CPU or on `sessions` from `/healthz` |
+| Media worker | stateless; add replicas. One live broadcast ≈ one encoder ≈ 1.5–2 CPU cores at 1080p30 (veryfast), plus a few % per platform relay | CPU; autoscale on CPU or on `sessions` from `/healthz` |
 | LiveKit | add nodes with Redis; one room lives on one node | bandwidth and CPU per room |
 | Egress (livekit mode) | add egress containers; each renders one broadcast in Chrome (≈ 2–4 cores) | CPU |
 | Postgres | managed instance, read replicas if dashboards get heavy | writes are tiny |
-| Recordings | local volume today (`DATA_DIR/recordings`) | see below |
+| Recordings | the worker hands each one to the API (`UPLOAD_RECORDINGS=1`), which keeps it on its disk | one API disk; see below |
 
 Rough capacity: a 16-core worker node carries about 4–6 simultaneous 1080p broadcasts in relay
 mode. Ten guests in one room is well inside a single LiveKit node.
 
 ### What to change before real production load
 
-1. **Recordings and assets on object storage.** They are written to a shared volume, which caps
-   you at one host or an NFS mount. `apps/api/src/routes/files.ts` and the worker's
-   `recordingsDir` are the two places to swap for S3/GCS.
+1. **Recordings and assets on object storage.** They live on the API's disk, which keeps the API
+   at one instance on Render (a service with a disk cannot scale). `apps/api/src/routes/files.ts`
+   is the one place to swap for S3, R2 or GCS; then the API can scale out too.
 2. **TURN.** Guests behind strict firewalls need TURN over TLS; enable it in the LiveKit config.
 3. **Rate limiting** on `/api/auth/*` and `/api/invites/*` at the proxy.
-4. **Per-destination reconnect.** With the tee muxer a destination that drops stays dropped until
-   the next go-live; the others keep running. Independent retries need one pusher process per
-   destination fed from a local relay.
-5. **Kubernetes.** The three images map to three Deployments (API and worker with an HPA), LiveKit
+4. **Kubernetes.** The three images map to three Deployments (API and worker with an HPA), LiveKit
    via its Helm chart with host networking, Postgres managed.
 
 ## Request flow: going live (relay mode)
@@ -148,15 +169,20 @@ mode. Ten guests in one room is well inside a single LiveKit node.
 2. API asks each destination adapter for an RTMP URL, seals the list into `egress_sessions`, and
    returns a WebSocket URL carrying a signed ingest token.
 3. Browser opens the WebSocket to a worker and starts sending WebM chunks.
-4. Worker exchanges the token at `POST /internal/egress/claim` for the RTMP targets, starts
-   ffmpeg, and reports status to `POST /internal/egress/status` as destinations connect or fail.
+4. Worker exchanges the token at `POST /internal/egress/claim` for the RTMP targets and an
+   `attempt` number, starts the encoder and one relay per target, and reports status (stamped
+   with the attempt) to `POST /internal/egress/status` as destinations connect, drop, reconnect
+   or fail.
 5. API stores the status and relays it to the studio over the LiveKit data channel.
-6. **End stream** closes the WebSocket; ffmpeg flushes, the worker reports the recording, the API
-   tells each platform the broadcast is over.
+6. **End stream** closes the WebSocket; ffmpeg flushes, the relays finish, the worker reports the
+   recording (and, with `UPLOAD_RECORDINGS=1`, streams it to `POST /internal/recordings/:file`),
+   and the API tells each platform the broadcast is over.
 
 ## Testing
 
-- `npm test`: unit and integration tests, among them the feed parsers against saved samples, the
+- `npm test`: unit and integration tests. The worker tests run real ffmpeg: one platform that
+  never connects while another gets the whole stream, and a platform that hangs up mid-show and
+  is reconnected while the other carries on. The API tests cover the attempt fencing. Also among them the feed parsers against saved samples, the
   rundown writer with faked models, the schedule's time arithmetic and the rundown routes. The API runs against in-memory PGlite; the worker
   test runs real ffmpeg.
 - `npm run e2e`: Playwright drives Chrome with a synthetic camera. A host and a guest go live to
@@ -168,5 +194,5 @@ mode. Ten guests in one room is well inside a single LiveKit node.
   The rundown test needs `NEWS_FIXTURE=1` (Playwright sets it when it starts the stack): the API
   then uses fixed news and calls no feed and no model.
 - Not covered by automated tests: the Gemini writer (no key with credit was available), what the
-  music sounds like, `livekit` egress mode and the infra files (no Docker on the
-  development machine), and the OAuth adapters against the real platforms (tested with mocked HTTP).
+  music sounds like, `livekit` egress mode and the container files (no Docker on the
+  development machine; the same builds are checked with npm, and CI builds them), and the OAuth adapters against the real platforms (tested with mocked HTTP).

@@ -37,7 +37,8 @@ if (env.NODE_ENV === 'production' && (env.INTERNAL_SECRET?.length ?? 0) < 32) {
 
 const server = startWorker({
   port: env.WORKER_PORT,
-  apiUrl: env.API_INTERNAL_URL.replace(/\/$/, ''),
+  // Render's private network gives `host:port` without a scheme.
+  apiUrl: (/^https?:\/\//.test(env.API_INTERNAL_URL) ? env.API_INTERNAL_URL : `http://${env.API_INTERNAL_URL}`).replace(/\/$/, ''),
   // Must match the API's development default.
   internalSecret: env.INTERNAL_SECRET || 'dev-only-secret-change-me-in-production!',
   dataDir: path.resolve(env.DATA_DIR),

@@ -1,16 +1,97 @@
-# StreamLabs Studio
+# OmniCast Studio
 
-A live-streaming studio in the browser, in the style of StreamYard, with a Material Design 3
-interface. Invite guests with a link, arrange them in layouts, share your screen, add your brand,
-and stream to YouTube, Twitch, Facebook, LinkedIn, X and Instagram at the same time.
+[![CI](https://github.com/Yash-Kavaiya/omnicast-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/Yash-Kavaiya/omnicast-studio/actions/workflows/ci.yml)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Yash-Kavaiya/omnicast-studio)
 
-## Quick start
+A live-streaming studio in the browser. Invite guests with a link, arrange them in layouts, share
+your screen, add your brand, and stream to **YouTube, Twitch, Facebook, LinkedIn, X and Instagram
+at the same time**, with a Material Design 3 interface.
+
+It is built so that one platform failing never takes the others down: each platform gets its own
+relay that reconnects by itself, and the host's connection, the workers and the API can all
+restart in the middle of a show without ending it. See [How it stays live](#how-it-stays-live).
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Browsers
+        H["Host studio<br/>(React · canvas compositor · audio mixer)"]
+        G["Guests<br/>(invite link, no account)"]
+    end
+
+    LK[("LiveKit<br/>WebRTC SFU<br/>(LiveKit Cloud)")]
+
+    subgraph Render["Render (or Docker Compose / Cloud Run)"]
+        W["omnicast-web<br/>Caddy: static app + proxy<br/>the only public service"]
+        A["omnicast-api<br/>Fastify<br/>auth · broadcasts · keys (sealed)"]
+        DB[("Postgres")]
+        D[("API disk<br/>assets · recordings")]
+        subgraph MW["omnicast-worker (stateless, scale out)"]
+            E["Encoder ffmpeg<br/>WebM → H.264/AAC, once"]
+            R1["Relay → YouTube"]
+            R2["Relay → Twitch"]
+            R3["Relay → Facebook / LinkedIn / X / Instagram"]
+        end
+    end
+
+    subgraph Platforms
+        YT[YouTube]
+        TW[Twitch]
+        OT[Others]
+    end
+
+    H <-- "cameras, mics, screens, data" --> LK
+    G <--> LK
+    H -- "HTTPS /api" --> W
+    H -- "WebSocket /ingest<br/>program stream" --> W
+    W --> A
+    W --> MW
+    A --> DB
+    A --> D
+    A -. "tokens, room metadata, status" .-> LK
+    MW -- "claim token → targets + attempt<br/>status reports · recording upload" --> A
+    E -- "MPEG-TS" --> R1 & R2 & R3
+    R1 -- "RTMP(S)" --> YT
+    R2 -- "RTMP(S)" --> TW
+    R3 -- "RTMP(S)" --> OT
+```
+
+1. The host's browser composes the program (people, screens, banners) on a canvas, mixes the
+   audio, and streams it over one WebSocket to a media worker.
+2. The worker exchanges the ingest token with the API for the platforms' RTMP URLs (stream keys
+   never reach a browser), encodes the program **once**, and hands the encoded stream to **one
+   copy-only relay per platform**, plus the recording.
+3. Status flows worker → API → studio (over the LiveKit data channel), so the host sees each
+   platform's state live: connecting, live, reconnecting, failed.
+
+More detail, the scaling table and the design decisions: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## How it stays live
+
+| What fails | What happens |
+|---|---|
+| **One platform drops or refuses mid-show** | Only that platform's relay restarts, after 1 s, 2 s, 4 s … up to 30 s, for as long as the show runs. The others and the recording carry on untouched. |
+| **A wrong stream key** | Marked failed with the reason after 5 tries; nobody else is affected. |
+| **A slow platform** | Its relay is restarted when it falls ~10 s behind, so it rejoins at live. The encoder is never held back. |
+| **The host's network blips** | The browser reconnects within 25 s, and the worker keeps the platforms waiting for 30 s. Viewers see a few seconds' pause, not an ended stream. |
+| **A worker is redeployed or crashes** | Browsers are told to reconnect (close code 1012) and land on a healthy instance. |
+| **The reconnect lands on a different worker** | Each claim gets a higher `attempt` number; the API ignores the old worker's reports, so it cannot end the show. |
+| **The API restarts** | The worker retries status reports and recording uploads with backoff. |
+| **Postgres hiccups** | The pool reconnects; `/api/health` returns 503 meanwhile so the platform can route around it. |
+| **Several API instances** | Migrations run under an advisory lock; one instance (lock holder) runs the daily schedule. |
+
+Scaling out: the web and worker tiers are stateless. Add worker instances as more shows go live at
+once (one 1080p30 show ≈ 2 CPU cores). The API is stateless except for its disk of uploads and
+recordings; move those to object storage to scale it out too.
+
+## Quick start (local)
 
 You need **Node 22 or newer** and **ffmpeg** on the PATH. No Docker.
 
 ```bash
-git clone https://github.com/Yash-Kavaiya/live-stream-labs.git
-cd live-stream-labs
+git clone https://github.com/Yash-Kavaiya/omnicast-studio.git
+cd omnicast-studio
 ./run.sh
 ```
 
@@ -30,38 +111,19 @@ Install ffmpeg with `winget install Gyan.FFmpeg` (Windows), `brew install ffmpeg
 
 ### Windows (PowerShell)
 
-In short:
+- **Start:** `npm run dev`: the full stack, with the LiveKit that runs on this computer. Keep the
+  window open, then open <http://localhost:5173>. Stop it with Ctrl+C.
+- **Stop a stuck stack:** kill whatever is holding ports 5173, 7880, 1935, 4000 and 4100:
 
-- **Start:** `npm run dev` — the full stack with the LiveKit that runs on this computer.
-- **Stop a stuck stack:** the PowerShell one-liner below, which kills whatever is holding ports
-  5173, 7880, 1935, 4000 and 4100.
-- **Start without LiveKit:** `$env:NO_LOCAL_LIVEKIT = '1'; npm run dev` — the studio then fails
-  with "Something went wrong".
+  ```powershell
+  Get-NetTCPConnection -State Listen -LocalPort 5173,7880,1935,4000,4100 -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object { taskkill /F /T /PID $_ }
+  ```
 
-Start the whole stack, with the LiveKit server that runs on this computer (no LiveKit Cloud, no
-account). Keep the window open, then open <http://localhost:5173>:
-
-```powershell
-npm run dev
-```
-
-Stop it with Ctrl+C. If an earlier run is still holding its ports, stop it with:
-
-```powershell
-Get-NetTCPConnection -State Listen -LocalPort 5173,7880,1935,4000,4100 -ErrorAction SilentlyContinue |
-  Select-Object -ExpandProperty OwningProcess -Unique |
-  ForEach-Object { taskkill /F /T /PID $_ }
-```
-
-To start without any LiveKit server:
-
-```powershell
-$env:NO_LOCAL_LIVEKIT = '1'; npm run dev
-```
-
-The dashboard then loads, but opening a studio fails with "Something went wrong": the studio
-needs a LiveKit room. Close that PowerShell window, or run `Remove-Item Env:NO_LOCAL_LIVEKIT`,
-before starting normally again.
+- **Start without LiveKit:** `$env:NO_LOCAL_LIVEKIT = '1'; npm run dev`. The dashboard loads, but
+  opening a studio fails with "Something went wrong", because the studio needs a LiveKit room. Run
+  `Remove-Item Env:NO_LOCAL_LIVEKIT` before starting normally again.
 
 ### What `run.sh` does
 
@@ -81,7 +143,7 @@ The stack is five processes:
 |---|---|
 | 5173 | Web app (Vite) |
 | 4000 | REST API |
-| 4100 | Media worker (ffmpeg ingest and fan-out) |
+| 4100 | Media worker (ffmpeg encoder and per-platform relays) |
 | 7880 | LiveKit server (dev mode) |
 | 1935 | Mock RTMP destination |
 
@@ -288,7 +350,7 @@ Votes by hand and the reaction buttons work without any of that.
 | Command | What it does |
 |---|---|
 | `npm run dev` | LiveKit, mock RTMP, API, media worker and web app |
-| `npm test` | Unit and integration tests (Vitest) |
+| `npm test` | Unit and integration tests (Vitest); the worker tests run real ffmpeg |
 | `npm run e2e` | End-to-end tests in Chrome (starts the stack if it is not running) |
 | `npm run typecheck` / `npm run lint` | Static checks |
 | `npm run build` | Production builds of all three apps |
@@ -313,21 +375,70 @@ machine you are streaming from while you are live.
 ```
 apps/web            React studio and dashboard
 apps/api            REST API
-apps/media-worker   ffmpeg ingest and fan-out
+apps/media-worker   ffmpeg encoder and one reconnecting relay per platform
 packages/shared     schemas, scene model, layout engine
 packages/ui         Material 3 tokens and components
 e2e/                Playwright end-to-end tests
 scripts/            dev launcher, LiveKit download, mock RTMP server
-infra/              Dockerfile, docker-compose.yml, Caddyfile
+infra/              Dockerfiles (render/ for Render), docker-compose.yml, Caddyfiles
+render.yaml         Render Blueprint
 docs/               ARCHITECTURE.md
 run.sh              set up and run everything
 ```
 
-## Deploy
+## Deploy to Render
 
-`infra/docker-compose.yml` runs the whole stack on one host: Caddy (HTTPS and single origin), API,
-workers, Postgres, Redis and LiveKit. Read the header of that file, then
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it scales and what to change first.
+[`render.yaml`](render.yaml) is a Render Blueprint that creates the whole stack in the Singapore
+region:
 
-The container files have not been run on the machine this was built on (it has no Docker); expect
-to adjust them on first deploy.
+| Service | Type | Plan | What it is |
+|---|---|---|---|
+| `omnicast-web` | Web service (public) | 0.5 CPU / 512 MB | Caddy: serves the app, proxies `/api`, `/assets` and the `/ingest` WebSocket |
+| `omnicast-api` | Private service | 0.5 CPU / 512 MB + 10 GB disk | REST API; uploads and recordings on its disk |
+| `omnicast-worker` | Private service | 2 CPU / 4 GB | ffmpeg encoder plus one relay per platform, 1080p30 at 6000 kbit/s |
+| `omnicast-db` | Render Postgres | 0.1 CPU / 256 MB | Accounts, broadcasts, sealed stream keys |
+
+**Steps**
+
+1. Create a free project at [LiveKit Cloud](https://cloud.livekit.io). Note its URL
+   (`wss://<project>.livekit.cloud`), API key and API secret. Render cannot host LiveKit, which
+   needs UDP ports for WebRTC.
+2. Click **Deploy to Render** at the top of this page, or in the Render dashboard go to
+   **New → Blueprint** and pick this repository.
+3. When asked, enter `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. The optional keys
+   (Google OAuth, NVIDIA, Gemini) can stay empty. `SESSION_SECRET`, `ENCRYPTION_KEY` and
+   `INTERNAL_SECRET` are generated by Render.
+4. Wait for the four resources to go live, then open `https://omnicast-web.onrender.com`.
+
+If Render gives the web service another address (because the name is taken), set `WEB_ORIGIN`
+and `PUBLIC_INGEST_URL` on `omnicast-api` to that address (`https://…` and `wss://…/ingest`).
+
+Render redeploys every push to `main`. A deploy restarts the worker: a show that is live at that
+moment pauses for a few seconds while the host's browser reconnects, and carries on.
+
+**Smaller or larger.** On a 1 CPU worker set `ENCODE_WIDTH=1280`, `ENCODE_HEIGHT=720`,
+`ENCODE_VIDEO_KBPS=4500`. For several shows at once, raise the worker's instance count. Each
+instance takes any show, and a reconnect may move a show between instances safely.
+
+### Environment variables
+
+| Variable | Service | Purpose |
+|---|---|---|
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | api | The LiveKit project for cameras, guests and the data channel |
+| `WEB_ORIGIN`, `PUBLIC_INGEST_URL` | api | The public address of `omnicast-web` |
+| `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_SECRET` | api (worker reads `INTERNAL_SECRET`) | Generated; 32+ characters each |
+| `DATABASE_URL` | api | From `omnicast-db` |
+| `ENCODE_WIDTH`, `ENCODE_HEIGHT`, `ENCODE_FPS`, `ENCODE_VIDEO_KBPS`, `ENCODE_AUDIO_KBPS` | worker | The one encode every platform gets |
+| `UPLOAD_RECORDINGS=1` | worker | Hand each recording to the API (they share no disk) |
+| `GOOGLE_*`, `TWITCH_*`, `FACEBOOK_*` | api | Optional one-click platform connect |
+| `NVIDIA_API_KEY`, `GEMINI_API_KEY` | api | Optional, for the daily AI news script |
+
+### Other ways to deploy
+
+- **One server with Docker Compose:** `infra/docker-compose.yml` runs Caddy (HTTPS), API, workers,
+  Postgres, Redis and LiveKit on one host. Read the header of that file.
+- **Google Cloud Run:** `.github/workflows/deploy.yml` (run by hand from the Actions tab). Cloud
+  Run cuts a WebSocket after 60 minutes, so a show is reconnected once an hour.
+
+The container files have not been built on the machine this was written on (it has no Docker).
+CI runs the same production builds with npm.
