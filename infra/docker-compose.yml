@@ -7,7 +7,7 @@
 #
 # Scale the stateless tiers with: docker compose ... up -d --scale api=3 --scale worker=4
 
-name: streamlabs-studio
+name: omnicast-studio
 
 x-app-env: &app-env
   NODE_ENV: production

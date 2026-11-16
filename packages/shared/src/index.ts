@@ -10,4 +10,4 @@ export * from './scene-layout';
 export * from './api';
 export * from './messages';
 
-export const APP_NAME = 'StreamLabs Studio';
+export const APP_NAME = 'OmniCast Studio';

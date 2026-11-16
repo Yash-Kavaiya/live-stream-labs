@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One script to set up and run StreamLabs Studio.
+# One script to set up and run OmniCast Studio.
 #
 #   ./run.sh            install what is missing, then start the whole stack
 #   ./run.sh guests     for inviting guests: a public https address, and LiveKit Cloud for media
@@ -76,7 +76,7 @@ start_stack() {
   if [ -n "$(port_pids)" ]; then
     fail "The stack (or something else) is already using its ports. Run './run.sh restart' to replace it."
   fi
-  say "Starting StreamLabs Studio at http://localhost:5173  (Ctrl+C to stop)"
+  say "Starting OmniCast Studio at http://localhost:5173  (Ctrl+C to stop)"
   # Set FFMPEG_LOG=1 before running to see ffmpeg's full log for each stream.
   exec npm run dev
 }
@@ -87,7 +87,7 @@ share_stack() {
   if [ -n "$(port_pids)" ]; then
     fail "The stack (or something else) is already using its ports. Run './run.sh stop' first."
   fi
-  say "Starting StreamLabs Studio for guests, behind a public address  (Ctrl+C to stop)"
+  say "Starting OmniCast Studio for guests, behind a public address  (Ctrl+C to stop)"
   # TUNNEL=ngrok or TUNNEL=cloudflare picks the tunnel; see scripts/share.mjs.
   exec node scripts/share.mjs
 }

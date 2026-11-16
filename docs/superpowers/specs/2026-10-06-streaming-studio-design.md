@@ -1,9 +1,9 @@
-# StreamLabs Studio: a StreamYard-style multistreaming platform
+# OmniCast Studio: a browser multistreaming platform
 
 ## Context
 
 `C:\Users\yashk\Downloads\live-stream-labs` is empty (no git repo). The goal is a browser-based live
-studio like StreamYard: a host opens a studio, invites guests by link, arranges them in layouts with
+studio: a host opens a studio, invites guests by link, arranges them in layouts with
 screen share and overlays, and goes live to YouTube, X, LinkedIn, Twitch and Meta (Facebook /
 Instagram) at once. The UI follows Google's Material Design 3 with Google fonts. The code must be
 clean and the architecture must scale horizontally.
@@ -15,7 +15,7 @@ Assumptions I am making (say so if any is wrong):
 
 - The `CLAUDE.md` in `Downloads\` describes a different project (the Jetson "Talk-to-your-Company"
   app: Python, port 8000, frozen scope). I am treating it as not applying to this folder.
-- TypeScript everywhere. Product working name "StreamLabs Studio" (rename is one constant).
+- TypeScript everywhere. Product name "OmniCast Studio" (rename is one constant).
 - You will supply your own OAuth app credentials for YouTube / Twitch / Facebook later; until then
   every platform works through its RTMP URL + stream key.
 
