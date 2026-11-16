@@ -6,9 +6,22 @@
 :root {
   color-scheme: light dark;
 
-  --md-ref-typeface-brand: 'Google Sans Flex', 'Google Sans', 'Roboto Flex', Roboto, system-ui, sans-serif;
-  --md-ref-typeface-plain: 'Google Sans Flex', 'Google Sans', 'Roboto Flex', Roboto, system-ui, sans-serif;
-  --app-font-mono: 'Roboto Mono', ui-monospace, 'Cascadia Mono', monospace;
+  /* Google's type: Google Sans for display, titles and labels; Google Sans Text for body copy. */
+  --md-ref-typeface-brand: 'Google Sans', 'Google Sans Flex', 'Product Sans', Roboto, system-ui, sans-serif;
+  --md-ref-typeface-plain: 'Google Sans Text', 'Google Sans', Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --app-font-mono: 'Google Sans Code', 'Roboto Mono', ui-monospace, 'Cascadia Mono', monospace;
+  /* Buttons, chips, tabs and other labels are set in Google Sans, as in Google's own apps. */
+  --md-sys-typescale-label-large-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-label-medium-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-label-small-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-title-medium-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-title-small-font: var(--md-ref-typeface-brand);
+
+  /* The four Google brand colours: accents, category coding and charts, never four fills at once. */
+  --app-google-blue: #4285f4;
+  --app-google-red: #ea4335;
+  --app-google-yellow: #fbbc04;
+  --app-google-green: #34a853;
   /* Material Web defaults to the Outlined set; we load Rounded. */
   --md-icon-font: 'Material Symbols Rounded';
 
@@ -23,7 +36,11 @@
   --app-elevation-2: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
   --app-elevation-3: 0 4px 8px 3px rgb(0 0 0 / 0.15), 0 1px 3px rgb(0 0 0 / 0.3);
 
+  --app-elevation-4: 0 6px 10px 4px rgb(0 0 0 / 0.15), 0 2px 3px rgb(0 0 0 / 0.3);
+
   --app-motion-standard: cubic-bezier(0.2, 0, 0, 1);
+  --app-motion-emphasized-decel: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --app-motion-emphasized-accel: cubic-bezier(0.3, 0, 0.8, 0.15);
 }
 
 :root,
@@ -70,6 +87,17 @@
   --app-on-live: #ffffff;
   --app-success: #188038;
   --app-warning: #b06000;
+
+  /* Google-coloured containers for category icons (blue, red, yellow, green). */
+  --app-blue-container: #d3e3fd;
+  --app-on-blue-container: #041e49;
+  --app-red-container: #fce8e6;
+  --app-on-red-container: #a50e0e;
+  --app-yellow-container: #feefc3;
+  --app-on-yellow-container: #7a4100;
+  --app-green-container: #e6f4ea;
+  --app-on-green-container: #0d652d;
+  --app-scrollbar: #dadce0;
 }
 
 :root[data-theme='dark'] {
@@ -112,6 +140,16 @@
   --app-on-live: #410e0b;
   --app-success: #81c995;
   --app-warning: #fdd663;
+
+  --app-blue-container: #0842a0;
+  --app-on-blue-container: #d3e3fd;
+  --app-red-container: #8c1d18;
+  --app-on-red-container: #fce8e6;
+  --app-yellow-container: #5c3c00;
+  --app-on-yellow-container: #feefc3;
+  --app-green-container: #0f5223;
+  --app-on-green-container: #ceead6;
+  --app-scrollbar: #5f6368;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -155,18 +193,29 @@
     --app-on-live: #410e0b;
     --app-success: #81c995;
     --app-warning: #fdd663;
+    --app-blue-container: #0842a0;
+    --app-on-blue-container: #d3e3fd;
+    --app-red-container: #8c1d18;
+    --app-on-red-container: #fce8e6;
+    --app-yellow-container: #5c3c00;
+    --app-on-yellow-container: #feefc3;
+    --app-green-container: #0f5223;
+    --app-on-green-container: #ceead6;
+    --app-scrollbar: #5f6368;
   }
 }
 
-/* M3 type scale as utility classes. */
-.display { font: 400 clamp(2.25rem, 5vw, 3.5rem) / 1.12 var(--md-ref-typeface-brand); letter-spacing: -0.01em; }
+/* The M3 type scale. Display, headline, title and label in Google Sans; body in Google Sans Text. */
+.display { font: 400 clamp(2.25rem, 5vw, 3.5625rem) / 1.12 var(--md-ref-typeface-brand); letter-spacing: -0.016em; }
 .headline { font: 400 1.75rem/2.25rem var(--md-ref-typeface-brand); }
+.headline-small { font: 400 1.5rem/2rem var(--md-ref-typeface-brand); }
 .title-large { font: 400 1.375rem/1.75rem var(--md-ref-typeface-brand); }
-.title-medium { font: 500 1rem/1.5rem var(--md-ref-typeface-plain); letter-spacing: 0.009em; }
-.title-small { font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.007em; }
-.body-large { font: 400 1rem/1.5rem var(--md-ref-typeface-plain); }
+.title-medium { font: 500 1rem/1.5rem var(--md-ref-typeface-brand); letter-spacing: 0.009em; }
+.title-small { font: 500 0.875rem/1.25rem var(--md-ref-typeface-brand); letter-spacing: 0.007em; }
+.body-large { font: 400 1rem/1.5rem var(--md-ref-typeface-plain); letter-spacing: 0.01em; }
 .body-medium { font: 400 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.016em; }
 .body-small { font: 400 0.75rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.025em; }
-.label-large { font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.007em; }
-.label-medium { font: 500 0.75rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.03em; }
+.label-large { font: 500 0.875rem/1.25rem var(--md-ref-typeface-brand); letter-spacing: 0.007em; }
+.label-medium { font: 500 0.75rem/1rem var(--md-ref-typeface-brand); letter-spacing: 0.03em; }
+.label-small { font: 500 0.6875rem/1rem var(--md-ref-typeface-brand); letter-spacing: 0.045em; }
 .muted { color: var(--md-sys-color-on-surface-variant); }

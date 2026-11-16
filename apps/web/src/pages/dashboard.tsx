@@ -11,10 +11,10 @@ import {
 } from '@studio/shared';
 import { Button, Checkbox, Dialog, EmptyState, Icon, IconButton, Select, Spinner, TextField } from '@studio/ui';
 import { useEffect, useState } from 'react';
-import { Navigate, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth, useLoad, useToast } from '../lib/app-context';
-import { formatBytes, formatDateTime, fromLocalInput, initials } from '../lib/format';
+import { formatBytes, formatDateTime, fromLocalInput, initials, toneFor } from '../lib/format';
 import { PlatformBadge } from '../studio/dialogs';
 import { LinkButton, Logo, ThemeButton } from './public';
 
@@ -29,6 +29,7 @@ const NAV = [
 export function AppShell() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   if (user === undefined) return <div className="center" style={{ height: '100%' }}><Spinner /></div>;
   if (user === null) return <Navigate to="/login" replace />;
 
@@ -44,7 +45,9 @@ export function AppShell() {
         <Logo />
         <span className="grow" />
         <ThemeButton />
-        <span className="avatar" title={`${user.name} · ${user.email}`}>{initials(user.name)}</span>
+        <span className="avatar account" data-tone={toneFor(user.email)} title={`${user.name} · ${user.email}`}>
+          {initials(user.name).slice(0, 1)}
+        </span>
         <IconButton icon="logout" label="Sign out" onClick={() => void signOut()} />
       </header>
       <nav className="shell-nav" aria-label="Main">
@@ -56,7 +59,10 @@ export function AppShell() {
         ))}
       </nav>
       <main className="shell-main">
-        <Outlet />
+        {/* Keyed by page, so each page enters with the Material rise. */}
+        <div key={location.pathname} className="rise-in">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
@@ -192,7 +198,7 @@ function BroadcastCard({ broadcast, onDelete }: { broadcast: BroadcastDto; onDel
   const status = STATUS_LABEL[broadcast.status];
   const when = broadcast.scheduledAt ?? broadcast.startedAt ?? broadcast.createdAt;
   return (
-    <article className="card outlined col broadcast-card" data-testid="broadcast-card">
+    <article className="card outlined hoverable col broadcast-card" data-testid="broadcast-card">
       <div className="row">
         <span className={`chip ${status.className}`}>{status.label}</span>
         <span className="grow" />
@@ -248,7 +254,7 @@ export function BroadcastsPage() {
           <Button variant="tonal" icon="add" onClick={() => setCreating(true)}>New broadcast</Button>
         </EmptyState>
       ) : (
-        <div className="card-grid">
+        <div className="card-grid rise-in-stagger">
           {broadcasts.data.map((broadcast) => (
             <BroadcastCard key={broadcast.id} broadcast={broadcast} onDelete={() => void remove(broadcast.id)} />
           ))}

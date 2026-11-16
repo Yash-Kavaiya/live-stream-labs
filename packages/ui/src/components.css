@@ -21,7 +21,35 @@ body {
 }
 
 h1, h2, h3, p { margin: 0; }
-a { color: var(--md-sys-color-primary); }
+a { color: var(--md-sys-color-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--app-font-mono); font-size: 0.92em; }
+::selection { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+
+/* Thin, quiet scrollbars, as in Google's apps. */
+* { scrollbar-width: thin; scrollbar-color: var(--app-scrollbar) transparent; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-thumb { background: var(--app-scrollbar); border: 4px solid transparent; border-radius: 8px; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--md-sys-color-outline); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* The one multi-colour moment: a Google four-colour strip. */
+.brand-strip {
+  height: 4px;
+  background: linear-gradient(90deg,
+    var(--app-google-blue) 0 25%, var(--app-google-red) 25% 50%,
+    var(--app-google-yellow) 50% 75%, var(--app-google-green) 75% 100%);
+}
+
+/* Content enters on Material's emphasized-decelerate curve. */
+@keyframes rise-in { from { opacity: 0; transform: translateY(12px); } }
+.rise-in { animation: rise-in 0.4s var(--app-motion-emphasized-decel) both; }
+.rise-in-stagger > * { animation: rise-in 0.45s var(--app-motion-emphasized-decel) both; }
+.rise-in-stagger > :nth-child(2) { animation-delay: 40ms; }
+.rise-in-stagger > :nth-child(3) { animation-delay: 80ms; }
+.rise-in-stagger > :nth-child(4) { animation-delay: 120ms; }
+.rise-in-stagger > :nth-child(5) { animation-delay: 160ms; }
+.rise-in-stagger > :nth-child(n + 6) { animation-delay: 200ms; }
 
 md-icon { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
 md-icon.filled { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
@@ -45,22 +73,26 @@ md-dialog { --md-dialog-container-color: var(--md-sys-color-surface-container-hi
 .card.elevated { box-shadow: var(--app-elevation-1); }
 .card.interactive { cursor: pointer; transition: background 0.2s var(--app-motion-standard), box-shadow 0.2s var(--app-motion-standard); }
 .card.interactive:hover { background: var(--md-sys-color-surface-container); box-shadow: var(--app-elevation-1); }
+.card.outlined.hoverable { transition: box-shadow 0.2s var(--app-motion-standard), border-color 0.2s var(--app-motion-standard); }
+.card.outlined.hoverable:hover { box-shadow: var(--app-elevation-1); border-color: transparent; }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   border-radius: var(--md-sys-shape-corner-small);
   border: 1px solid var(--md-sys-color-outline-variant);
   color: var(--md-sys-color-on-surface-variant);
-  font: 500 0.75rem/1 var(--md-ref-typeface-plain);
+  font: 500 0.875rem/1 var(--md-ref-typeface-brand);
+  letter-spacing: 0.007em;
   white-space: nowrap;
 }
 .chip md-icon { --md-icon-size: 16px; }
 .chip.primary { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); border-color: transparent; }
-.chip.success { color: var(--app-success); border-color: currentColor; }
+.chip.success { background: var(--app-green-container); color: var(--app-on-green-container); border-color: transparent; }
+.chip.warning { background: var(--app-yellow-container); color: var(--app-on-yellow-container); border-color: transparent; }
 .chip.error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); border-color: transparent; }
 .chip.live { background: var(--app-live); color: var(--app-on-live); border-color: transparent; font-weight: 700; letter-spacing: 0.06em; }
 .chip.live::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1.4s infinite; }
@@ -86,7 +118,10 @@ md-dialog { --md-dialog-container-color: var(--md-sys-color-surface-container-hi
 
 .list-item { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-radius: var(--md-sys-shape-corner-medium); }
 .list-item + .list-item { margin-top: 2px; }
-.list-item:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent); }
+/* M3 state layers: 8% of the content colour on hover, 10% when pressed. */
+.list-item { transition: background 0.15s var(--app-motion-standard); }
+.list-item:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.list-item:active { background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent); }
 
 .avatar {
   flex: none;
@@ -99,6 +134,14 @@ md-dialog { --md-dialog-container-color: var(--md-sys-color-surface-container-hi
   color: var(--md-sys-color-on-primary-container);
   font: 500 1rem/1 var(--md-ref-typeface-brand);
 }
+/* An account avatar: a solid Google colour with a white initial, like a Google account. */
+.avatar.account { color: #fff; font-size: 1.125rem; }
+.avatar.account[data-tone='0'] { background: #1a73e8; }
+.avatar.account[data-tone='1'] { background: #d93025; }
+.avatar.account[data-tone='2'] { background: #e37400; }
+.avatar.account[data-tone='3'] { background: #188038; }
+.avatar.account[data-tone='4'] { background: #9334e6; }
+.avatar.account[data-tone='5'] { background: #007b83; }
 
 .segmented { display: inline-flex; border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
 .segmented button {
@@ -115,6 +158,7 @@ md-dialog { --md-dialog-container-color: var(--md-sys-color-surface-container-hi
   cursor: pointer;
 }
 .segmented button:last-child { border-right: 0; }
+.segmented button { font-family: var(--md-ref-typeface-brand); transition: background 0.15s var(--app-motion-standard); }
 .segmented button:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
 .segmented button[aria-pressed='true'] { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .segmented button:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }

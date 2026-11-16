@@ -11,7 +11,10 @@ export function Logo() {
   return (
     <Link to="/" className="logo">
       <img src="/favicon.svg" alt="" width={32} height={32} />
-      <span className="title-large">{APP_NAME}</span>
+      {/* Google's product lockup: the name, then the product in grey. */}
+      <span className="logo-name">
+        {APP_NAME.split(' ')[0]} <span className="logo-product">{APP_NAME.split(' ').slice(1).join(' ')}</span>
+      </span>
     </Link>
   );
 }
@@ -51,6 +54,7 @@ export function Landing() {
   const { user } = useAuth();
   return (
     <div className="landing">
+      <div className="brand-strip" />
       <header className="public-bar">
         <Logo />
         <span className="grow" />
@@ -65,8 +69,10 @@ export function Landing() {
         )}
       </header>
 
-      <section className="hero">
-        <h1 className="display">Your live show, on every platform at once</h1>
+      <section className="hero rise-in-stagger">
+        <h1 className="display">
+          Your live show, on <span className="hero-accent">every platform</span> at once
+        </h1>
         <p className="title-large muted">
           A studio in your browser. Invite guests, share your screen, add your brand, and stream to
           all your channels together.
@@ -85,10 +91,11 @@ export function Landing() {
         </div>
       </section>
 
-      <section id="features" className="feature-grid">
-        {FEATURES.map((feature) => (
-          <article key={feature.title} className="card col">
-            <span className="feature-icon"><Icon name={feature.icon} /></span>
+      <section id="features" className="feature-grid rise-in-stagger">
+        {FEATURES.map((feature, i) => (
+          <article key={feature.title} className="card col feature-card">
+            {/* Category colour cycles through Google blue, red, yellow and green. */}
+            <span className="feature-icon" data-tone={i % 4}><Icon name={feature.icon} /></span>
             <h2 className="title-large">{feature.title}</h2>
             <p className="body-large muted">{feature.text}</p>
           </article>
@@ -130,9 +137,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
 
   return (
     <main className="auth-page">
-      <form className="card outlined col auth-card" onSubmit={submit}>
+      <form className="card outlined col auth-card rise-in" onSubmit={submit}>
         <Logo />
-        <div>
+        <div className="auth-heading">
           <h1 className="headline">{isSignup ? 'Create your account' : 'Sign in'}</h1>
           <p className="body-large muted">{isSignup ? 'Start streaming in a minute.' : 'Welcome back.'}</p>
         </div>

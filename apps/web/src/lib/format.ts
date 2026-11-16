@@ -22,6 +22,13 @@ export function initials(name: string): string {
   return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? parts.at(-1)![0] : '')).toUpperCase();
 }
 
+/** A stable 0–5 colour index for an account avatar, as Google gives each account its own colour. */
+export function toneFor(key: string): number {
+  let hash = 0;
+  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return hash % 6;
+}
+
 /** Value for <input type="datetime-local"> from an ISO string, in local time. */
 export function toLocalInput(iso: string | null): string {
   if (!iso) return '';

@@ -1,6 +1,9 @@
 /* App layout. Colours, type and shape all come from the M3 tokens in @studio/ui. */
 
 .logo { display: inline-flex; align-items: center; gap: 10px; color: var(--md-sys-color-on-surface); text-decoration: none; }
+.logo:hover { text-decoration: none; }
+.logo-name { font: 500 1.375rem/1.75rem var(--md-ref-typeface-brand); letter-spacing: -0.01em; white-space: nowrap; }
+.logo-product { font-weight: 400; color: var(--md-sys-color-on-surface-variant); }
 
 .platform-badge {
   flex: none;
@@ -36,18 +39,27 @@
   margin: 0 auto;
   padding: 24px;
 }
+.feature-card { padding: 28px; gap: 16px; border-radius: var(--md-sys-shape-corner-extra-large); transition: background 0.2s var(--app-motion-standard), box-shadow 0.2s var(--app-motion-standard); }
+.feature-card:hover { background: var(--md-sys-color-surface-container); box-shadow: var(--app-elevation-1); }
 .feature-icon {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--md-sys-shape-corner-medium);
-  background: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
+  width: 56px;
+  height: 56px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--app-blue-container);
+  color: var(--app-on-blue-container);
 }
+.feature-icon[data-tone='1'] { background: var(--app-red-container); color: var(--app-on-red-container); }
+.feature-icon[data-tone='2'] { background: var(--app-yellow-container); color: var(--app-on-yellow-container); }
+.feature-icon[data-tone='3'] { background: var(--app-green-container); color: var(--app-on-green-container); }
+.hero-accent { color: var(--md-sys-color-primary); }
 
 .auth-page { min-height: 100%; display: grid; place-items: center; padding: 24px; background: var(--md-sys-color-surface-container-low); }
-.auth-card { width: min(440px, 100%); gap: 20px; padding: 36px; border-radius: var(--md-sys-shape-corner-extra-large); }
+.auth-card { width: min(448px, 100%); gap: 20px; padding: 40px; border-radius: var(--md-sys-shape-corner-extra-large); }
+/* Centred, like Google's own sign-in page. */
+.auth-card > .logo { align-self: center; }
+.auth-heading { text-align: center; display: grid; gap: 8px; margin-bottom: 8px; }
 
 .watch { display: grid; gap: 20px; max-width: 1040px; margin: 0 auto; padding: 24px; }
 .watch-video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--md-sys-shape-corner-large); }
