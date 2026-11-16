@@ -13,7 +13,7 @@ import { LiveKitService } from './services/livekit';
 
 loadDotEnv();
 const config = loadConfig();
-const { db, close } = await openDb({ databaseUrl: config.databaseUrl, dataDir: config.dataDir });
+const { db, close, holdsLock } = await openDb({ databaseUrl: config.databaseUrl, dataDir: config.dataDir });
 const signer = new TokenSigner(config.sessionSecret);
 
 // With NEWS_FIXTURE=1 (end-to-end tests) the rundown comes from fixed items, no model is called,
@@ -35,7 +35,7 @@ const app = await buildApp({
 });
 
 await app.listen({ host: '0.0.0.0', port: config.port });
-const stopSchedule = config.news.fixture ? () => undefined : startSchedule(rundowns, (message) => app.log.info(message));
+const stopSchedule = config.news.fixture ? () => undefined : startSchedule(rundowns, (message) => app.log.info(message), undefined, () => holdsLock('daily-rundown'));
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {

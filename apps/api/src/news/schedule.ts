@@ -32,14 +32,25 @@ export function nextRunAt(now: Date): Date {
  * Makes the rundown every day at 17:00 India time, and at once when the server starts after that
  * hour on a day that has none yet. Returns a function that stops it.
  */
-export function startSchedule(service: RundownService, log: (message: string) => void, now: () => Date = () => new Date()): () => void {
+export function startSchedule(
+  service: RundownService,
+  log: (message: string) => void,
+  now: () => Date = () => new Date(),
+  /** With several API instances, only the one this answers true for makes the rundown. */
+  isLeader: () => Promise<boolean> = async () => true,
+): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
   let due = nextRunAt(now());
 
   const run = (why: string) => {
-    log(`Making the rundown for ${istDate(now())} (${why})`);
-    void service.generate().then(() => log(service.lastError ? `The rundown was not made: ${service.lastError}` : 'The rundown is ready'));
+    void isLeader()
+      .catch(() => false)
+      .then((leader) => {
+        if (!leader || stopped) return;
+        log(`Making the rundown for ${istDate(now())} (${why})`);
+        return service.generate().then(() => log(service.lastError ? `The rundown was not made: ${service.lastError}` : 'The rundown is ready'));
+      });
   };
 
   const tick = () => {

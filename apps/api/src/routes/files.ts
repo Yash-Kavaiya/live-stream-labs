@@ -1,12 +1,14 @@
-import { createReadStream } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { RecordingDto } from '@studio/shared';
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { newId } from '../crypto';
+import { newId, safeEqual } from '../crypto';
 import { broadcasts, recordings } from '../db/schema';
-import { badRequest, notFound, requireUserId, type Deps } from '../http/context';
+import { badRequest, HttpError, notFound, requireUserId, type Deps } from '../http/context';
 import { getOwnedBroadcast } from '../services/broadcasts';
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -85,6 +87,30 @@ export function fileRoutes(app: FastifyInstance, deps: Deps): void {
     if (!SAFE_NAME.test(name) || !type) throw notFound('Asset');
     reply.header('cache-control', 'public, max-age=31536000, immutable');
     return sendFile(req, reply, path.join(assetsDir, name), type);
+  });
+
+  // --- Recordings handed over by a media worker that has no disk in common with the API. ---
+
+  // The body is streamed straight to disk: a recording can be several gigabytes.
+  app.addContentTypeParser('video/mp4', (_req, payload, done) => done(null, payload));
+
+  app.post('/internal/recordings/:file', async (req) => {
+    const given = req.headers['x-internal-secret'];
+    if (typeof given !== 'string' || !safeEqual(given, config.internalSecret)) {
+      throw new HttpError(403, 'forbidden', 'Internal endpoint');
+    }
+    const { file } = req.params as { file: string };
+    if (!SAFE_NAME.test(file) || !file.endsWith('.mp4')) throw badRequest('Bad recording name');
+    await mkdir(recordingsDir, { recursive: true });
+    const partial = path.join(recordingsDir, `${file}.part`);
+    try {
+      await pipeline(req.body as Readable, createWriteStream(partial));
+      await rename(partial, path.join(recordingsDir, file));
+    } catch (err) {
+      await rm(partial, { force: true });
+      throw err;
+    }
+    return { ok: true };
   });
 
   // --- Recordings. The share token is the capability: anyone with the link can watch. ---

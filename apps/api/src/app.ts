@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { HttpError, type Deps } from './http/context';
 import { authRoutes } from './routes/auth';
@@ -36,6 +37,16 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   });
 
   app.get('/healthz', async () => ({ ok: true }));
+  // Readiness for a load balancer (Render, Cloud Run): answers 503 while the database is out of
+  // reach, so traffic goes to an instance that can serve it.
+  app.get('/api/health', async (_req, reply) => {
+    try {
+      await deps.db.execute(sql`select 1`);
+      return { ok: true };
+    } catch {
+      return reply.code(503).send({ ok: false, error: 'database_unreachable' });
+    }
+  });
 
   authRoutes(app, deps);
   destinationRoutes(app, deps);
