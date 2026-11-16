@@ -1,11 +1,23 @@
-# Checks every push and pull request. Render deploys main by itself (render.yaml), so a change
-# reaches production only through code that passed here.
-name: CI
+# CI/CD: every push and pull request is checked; what passes is deployed to Netlify.
+#
+#   push to main  -> checks -> production deploy of the web app
+#   pull request  -> checks -> preview deploy, its link posted on the pull request
+#
+# The web app is the only part on Netlify. The API and the media worker (ffmpeg, long-lived
+# WebSockets, database, disk) run on Cloud Run: see deploy.yml.
+#
+# Repository settings (Settings → Secrets and variables → Actions):
+#   secret   NETLIFY_AUTH_TOKEN  Netlify → User settings → Applications → Personal access tokens
+#   secret   NETLIFY_SITE_ID     Netlify → Site configuration → Site details → Site ID
+#   variable BACKEND_URL         https origin of the API, e.g. https://studio-api-<number>.asia-south1.run.app
+# Until they are set, the deploy job is skipped with a note and the checks still run.
+name: CI/CD
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -28,3 +40,88 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  deploy:
+    name: Deploy web app to Netlify
+    needs: check
+    # Pull requests from forks get no secrets, so they are checked but not deployed.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      deployments: write
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'netlify-preview' || 'netlify-production' }}
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      BACKEND_URL: ${{ vars.BACKEND_URL }}
+    steps:
+      - name: Check the Netlify settings
+        id: ready
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ] || [ -z "$BACKEND_URL" ]; then
+            echo "::notice::Netlify deploy skipped: set the NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID secrets and the BACKEND_URL variable."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.ok == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build the web app
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          npm ci
+          npm run build -w @studio/web
+          node scripts/netlify-redirects.mjs
+
+      - name: Deploy
+        id: deploy
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            args="--alias pr-${{ github.event.pull_request.number }}"
+            field=deploy_url
+          else
+            args="--prod"
+            field=url
+          fi
+          npx -y netlify-cli@27.19.0 deploy --dir apps/web/dist --no-build $args \
+            --message "${{ github.event_name }} ${GITHUB_SHA::7}" --json > deploy.json
+          url=$(node -p "require('./deploy.json').$field")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          set -e
+          url="${{ steps.deploy.outputs.url }}"
+          curl -fsS "$url/" | grep -q '<div id="root">'
+          # A deep link is the app too, and /api reaches the backend through the proxy.
+          curl -fsS "$url/app/settings" | grep -q '<div id="root">'
+          curl -fsS "$url/api/config" | grep -q egressMode
+
+      - name: Post the preview link
+        if: steps.ready.outputs.ok == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.url }}';
+            const marker = '<!-- netlify-preview -->';
+            const body = `${marker}\n**Netlify preview:** ${url}\n\nBuilt from ${context.sha.slice(0, 7)}.`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find((c) => c.body?.includes(marker));
+            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });

@@ -1,7 +1,6 @@
 # OmniCast Studio
 
-[![CI](https://github.com/Yash-Kavaiya/omnicast-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/Yash-Kavaiya/omnicast-studio/actions/workflows/ci.yml)
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Yash-Kavaiya/omnicast-studio)
+[![CI/CD](https://github.com/Yash-Kavaiya/omnicast-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/Yash-Kavaiya/omnicast-studio/actions/workflows/ci.yml)
 
 A live-streaming studio in the browser. Invite guests with a link, arrange them in layouts, share
 your screen, add your brand, and stream to **YouTube, Twitch, Facebook, LinkedIn, X and Instagram
@@ -22,12 +21,15 @@ flowchart LR
 
     LK[("LiveKit<br/>WebRTC SFU<br/>(LiveKit Cloud)")]
 
-    subgraph Render["Render (or Docker Compose / Cloud Run)"]
-        W["omnicast-web<br/>Caddy: static app + proxy<br/>the only public service"]
-        A["omnicast-api<br/>Fastify<br/>auth · broadcasts · keys (sealed)"]
+    subgraph Netlify["Netlify"]
+        W["Web app (static, CDN)<br/>proxies /api and /assets"]
+    end
+
+    subgraph Cloud["Google Cloud Run (or Docker Compose)"]
+        A["studio-api<br/>Fastify<br/>auth · broadcasts · keys (sealed)"]
         DB[("Postgres")]
-        D[("API disk<br/>assets · recordings")]
-        subgraph MW["omnicast-worker (stateless, scale out)"]
+        D[("API storage<br/>assets · recordings")]
+        subgraph MW["studio-worker (stateless, scale out)"]
             E["Encoder ffmpeg<br/>WebM → H.264/AAC, once"]
             R1["Relay → YouTube"]
             R2["Relay → Twitch"]
@@ -44,9 +46,8 @@ flowchart LR
     H <-- "cameras, mics, screens, data" --> LK
     G <--> LK
     H -- "HTTPS /api" --> W
-    H -- "WebSocket /ingest<br/>program stream" --> W
-    W --> A
-    W --> MW
+    W -- "proxy" --> A
+    H -- "WebSocket /ingest<br/>program stream" --> MW
     A --> DB
     A --> D
     A -. "tokens, room metadata, status" .-> LK
@@ -380,49 +381,61 @@ packages/shared     schemas, scene model, layout engine
 packages/ui         Material 3 tokens and components
 e2e/                Playwright end-to-end tests
 scripts/            dev launcher, LiveKit download, mock RTMP server
-infra/              Dockerfiles (render/ for Render), docker-compose.yml, Caddyfiles
-render.yaml         Render Blueprint
+infra/              Dockerfile, docker-compose.yml, Caddyfiles
+netlify.toml        Netlify build, headers (the web app)
 docs/               ARCHITECTURE.md
 run.sh              set up and run everything
 ```
 
-## Deploy to Render
+## Deploy: Netlify + Cloud Run
 
-[`render.yaml`](render.yaml) is a Render Blueprint that creates the whole stack in the Singapore
-region:
+| Part | Where | Pipeline |
+|---|---|---|
+| Web app (React, static) | **Netlify** | `.github/workflows/ci.yml` (CI/CD): checks, then a production deploy on every push to `main` and a preview per pull request |
+| API (`studio-api`) | Google Cloud Run | `.github/workflows/deploy.yml`, run from the Actions tab |
+| Media worker (`studio-worker`, ffmpeg) | Google Cloud Run | same |
+| LiveKit (cameras, guests) | LiveKit Cloud | none: paste its keys (below) |
 
-| Service | Type | Plan | What it is |
-|---|---|---|---|
-| `omnicast-web` | Web service (public) | 0.5 CPU / 512 MB | Caddy: serves the app, proxies `/api`, `/assets` and the `/ingest` WebSocket |
-| `omnicast-api` | Private service | 0.5 CPU / 512 MB + 10 GB disk | REST API; uploads and recordings on its disk |
-| `omnicast-worker` | Private service | 2 CPU / 4 GB | ffmpeg encoder plus one relay per platform, 1080p30 at 6000 kbit/s |
-| `omnicast-db` | Render Postgres | 0.1 CPU / 256 MB | Accounts, broadcasts, sealed stream keys |
+Netlify serves static files and short functions only, so it cannot run the media worker (ffmpeg,
+an hour-long WebSocket) or the API's database and storage; those run as containers on Cloud Run.
+The Netlify site proxies `/api` and `/assets` to the API, so the browser still sees one origin and
+the session cookie works. Netlify's proxy does not carry WebSockets, so the host's program stream
+goes straight to the worker (`PUBLIC_INGEST_URL=wss://studio-worker-…/ingest`).
 
-**Steps**
+```
+push / PR ──► CI/CD: typecheck · lint · tests (real ffmpeg) · build
+                 └─► Netlify deploy (prod on main, preview on PR) ─► smoke test /, /app/settings, /api/config
+Actions tab ──► Deploy backend: checks ─► build api + worker images ─► Cloud Run ─► /api/health, /health
+```
 
-1. Create a free project at [LiveKit Cloud](https://cloud.livekit.io). Note its URL
-   (`wss://<project>.livekit.cloud`), API key and API secret. Render cannot host LiveKit, which
-   needs UDP ports for WebRTC.
-2. Click **Deploy to Render** at the top of this page, or in the Render dashboard go to
-   **New → Blueprint** and pick this repository.
-3. When asked, enter `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, or leave all three
-   empty and add the project later in the app (step 5). The optional keys
-   (Google OAuth, NVIDIA, Gemini) can stay empty. `SESSION_SECRET`, `ENCRYPTION_KEY` and
-   `INTERNAL_SECRET` are generated by Render.
-4. Wait for the four resources to go live, then open `https://omnicast-web.onrender.com`.
-5. Sign up, open **Settings** and paste the LiveKit Cloud URL, API key and API secret, then
-   **Test and save**. The API checks them with LiveKit before saving, keeps the secret encrypted
-   and never sends it back to a browser. Each account can use its own project this way; one saved
-   in Settings takes precedence over the server's `LIVEKIT_*` values.
+**First-time setup**
 
-If Render gives the web service another address (because the name is taken), set `WEB_ORIGIN`
-and `PUBLIC_INGEST_URL` on `omnicast-api` to that address (`https://…` and `wss://…/ingest`).
+1. **Netlify site.** In Netlify, *Add new site → Deploy manually* (or import the repository and
+   turn off its own builds: GitHub Actions deploys). Note the **Site ID** (*Site configuration →
+   Site details*) and create a **personal access token** (*User settings → Applications*).
+2. **Backend.** In GitHub, *Settings → Secrets and variables → Actions*:
+   - secrets `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_SECRET` (32+ random characters each);
+   - variable `WEB_ORIGIN` = the Netlify address, e.g. `https://omnicast-studio.netlify.app`;
+   - optional: variable `LIVEKIT_URL` and secrets `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (the
+     default LiveKit project), and secret `DATABASE_URL` (a Postgres such as Neon or Cloud SQL;
+     without it the API keeps its database inside the container, which a restart wipes).
 
-Render redeploys every push to `main`. A deploy restarts the worker: a show that is live at that
-moment pauses for a few seconds while the host's browser reconnects, and carries on.
+   Then *Actions → Deploy backend to Cloud Run → Run workflow*. The run summary prints the API
+   address.
+3. **Netlify deploy.** Add secrets `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` and variable
+   `BACKEND_URL` = the API address from step 2. The next push to `main` deploys the web app (or
+   run *Actions → CI/CD → Run workflow*). Until these are set, CI/CD runs the checks and skips the
+   deploy with a note.
+4. **LiveKit.** Either set the `LIVEKIT_*` values in step 2, or sign up on the site, open
+   **Settings** and paste your LiveKit Cloud URL, API key and API secret, then **Test and save**.
+   The API checks them with LiveKit, keeps the secret encrypted and never sends it to a browser.
+   An account's own project takes precedence over the server's.
+
+Cloud Run ends a request after 60 minutes, so a live show reconnects to the worker once an hour;
+the browser does this by itself and the platforms see a short pause.
 
 **Smaller or larger.** On a 1 CPU worker set `ENCODE_WIDTH=1280`, `ENCODE_HEIGHT=720`,
-`ENCODE_VIDEO_KBPS=4500`. For several shows at once, raise the worker's instance count. Each
+`ENCODE_VIDEO_KBPS=4500`. For several shows at once, raise the worker's `--max-instances`. Each
 instance takes any show, and a reconnect may move a show between instances safely.
 
 ### Environment variables
@@ -430,9 +443,11 @@ instance takes any show, and a reconnect may move a show between instances safel
 | Variable | Service | Purpose |
 |---|---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | api | Optional. The server's LiveKit project for cameras, guests and the data channel; accounts without their own (Settings) use it |
-| `WEB_ORIGIN`, `PUBLIC_INGEST_URL` | api | The public address of `omnicast-web` |
-| `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_SECRET` | api (worker reads `INTERNAL_SECRET`) | Generated; 32+ characters each |
-| `DATABASE_URL` | api | From `omnicast-db` |
+| `WEB_ORIGIN` | api | The Netlify site's address |
+| `PUBLIC_INGEST_URL` | api | The worker's `wss://…/ingest` address (set by `deploy.yml`) |
+| `BACKEND_URL` | Netlify build | The API's https address; `/api` and `/assets` are proxied to it |
+| `SESSION_SECRET`, `ENCRYPTION_KEY`, `INTERNAL_SECRET` | api (worker reads `INTERNAL_SECRET`) | 32+ random characters each |
+| `DATABASE_URL` | api | Postgres; without it, an embedded database inside the container |
 | `ENCODE_WIDTH`, `ENCODE_HEIGHT`, `ENCODE_FPS`, `ENCODE_VIDEO_KBPS`, `ENCODE_AUDIO_KBPS` | worker | The one encode every platform gets |
 | `UPLOAD_RECORDINGS=1` | worker | Hand each recording to the API (they share no disk) |
 | `GOOGLE_*`, `TWITCH_*`, `FACEBOOK_*` | api | Optional one-click platform connect |
@@ -442,8 +457,6 @@ instance takes any show, and a reconnect may move a show between instances safel
 
 - **One server with Docker Compose:** `infra/docker-compose.yml` runs Caddy (HTTPS), API, workers,
   Postgres, Redis and LiveKit on one host. Read the header of that file.
-- **Google Cloud Run:** `.github/workflows/deploy.yml` (run by hand from the Actions tab). Cloud
-  Run cuts a WebSocket after 60 minutes, so a show is reconnected once an hour.
 
 The container files have not been built on the machine this was written on (it has no Docker).
 CI runs the same production builds with npm.
