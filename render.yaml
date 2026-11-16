@@ -1,0 +1,116 @@
+# OmniCast Studio backend on Render: the API, the media worker and Postgres.
+# The web app is on Netlify (netlify.toml); it proxies /api and /assets to omnicast-api.
+#
+#   Render dashboard → New → Blueprint → pick this repository → enter the LIVEKIT_* values.
+#
+# Both services are public web services:
+#   omnicast-api     reached through the Netlify site's /api proxy.
+#   omnicast-worker  the host's browser streams its program to wss://…/ingest directly, because
+#                    Netlify's proxy does not carry WebSockets. The signed ingest token authorises it.
+#
+# If Render gives a service another address than below (the name was taken), change
+# PUBLIC_INGEST_URL here and BACKEND_URL in netlify.toml to match.
+# If the Netlify site's address changes, change WEB_ORIGIN.
+
+services:
+  # Accounts, broadcasts, stream keys (encrypted), recordings and uploads. Its disk holds the
+  # uploaded images, music and recordings; a service with a disk runs as one instance.
+  - type: web
+    name: omnicast-api
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./infra/render/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: omnicast-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4000'
+      - key: API_PORT
+        value: '4000'
+      - key: DATA_DIR
+        value: /data
+      - key: DATABASE_URL
+        fromDatabase: { name: omnicast-db, property: connectionString }
+      - key: WEB_ORIGIN
+        value: https://netlify-github-secrets.netlify.app
+      - key: PUBLIC_INGEST_URL
+        value: wss://omnicast-worker.onrender.com/ingest
+      - key: EGRESS_MODE
+        value: relay
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: INTERNAL_SECRET
+        generateValue: true
+      # The default LiveKit project for accounts without their own (Settings). Entered in the
+      # dashboard, never committed. Leave all three empty to have each account add its own.
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # Optional: one-click platform connect and the daily AI news rundown.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # The encoder: takes each host's program stream, encodes it once and runs one relay per
+  # platform. It keeps no state, so more instances can be added as more shows go live at once.
+  - type: web
+    name: omnicast-worker
+    runtime: docker
+    region: singapore
+    plan: 2c-4g
+    dockerfilePath: ./infra/render/worker.Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    numInstances: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4100'
+      - key: WORKER_PORT
+        value: '4100'
+      - key: DATA_DIR
+        value: /tmp/data
+      # Over Render's private network.
+      - key: API_INTERNAL_URL
+        fromService: { type: web, name: omnicast-api, property: hostport }
+      - key: INTERNAL_SECRET
+        fromService: { type: web, name: omnicast-api, envVarKey: INTERNAL_SECRET }
+      # The worker's disk is temporary: each recording is handed to the API when it ends.
+      - key: UPLOAD_RECORDINGS
+        value: '1'
+      # 1080p at 30 fps, 6000 kbit/s: what 2 CPUs encode in real time. On 1 CPU use 1280x720 at 4500.
+      - key: ENCODE_WIDTH
+        value: '1920'
+      - key: ENCODE_HEIGHT
+        value: '1080'
+      - key: ENCODE_FPS
+        value: '30'
+      - key: ENCODE_VIDEO_KBPS
+        value: '6000'
+
+databases:
+  - name: omnicast-db
+    region: singapore
+    plan: 0.1c-256mb
+    databaseName: omnicast
+    user: omnicast

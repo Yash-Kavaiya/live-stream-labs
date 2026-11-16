@@ -3,10 +3,10 @@
 # Deploys come from GitHub Actions (.github/workflows/ci.yml): production on every push to main
 # that passes the checks, a preview for every pull request. Netlify's own Git builds can stay off.
 #
-# Netlify serves the built web app only. The API and the media worker run as containers (they
-# need ffmpeg, long-lived WebSockets, a database and disk), on Google Cloud Run through
-# .github/workflows/deploy.yml. scripts/netlify-redirects.mjs points /api and /assets at the API,
-# so the browser still talks to one origin; the host's stream goes straight to the worker.
+# Netlify serves the built web app only. The API and the media worker run as containers on Render
+# (render.yaml): they need ffmpeg, long-lived WebSockets, a database and disk.
+# scripts/netlify-redirects.mjs points /api and /assets at the API, so the browser still talks to
+# one origin; the host's stream goes straight to the worker.
 
 [build]
   base = "."
@@ -16,9 +16,8 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  # The API on Cloud Run (deploy.yml). Not a secret: Cloud Run derives the address from the
-  # service name, project number and region. /api and /assets are proxied to it.
-  BACKEND_URL = "https://studio-api-443180956629.asia-south1.run.app"
+  # The API on Render (render.yaml). Not a secret. /api and /assets are proxied to it.
+  BACKEND_URL = "https://omnicast-api.onrender.com"
 
 # Built files have a content hash in their name and never change.
 [[headers]]

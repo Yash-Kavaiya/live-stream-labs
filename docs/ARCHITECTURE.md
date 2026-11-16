@@ -165,14 +165,14 @@ mode. Ten guests in one room is well inside a single LiveKit node.
 
 The web app is static and served by Netlify (`netlify.toml`, deployed by the CI/CD workflow),
 which proxies `/api` and `/assets` to the API so the browser sees one origin. The API and the
-media worker run as containers on Cloud Run (`deploy.yml`). Netlify's proxy does not carry
+media worker run as containers on Render (`render.yaml`), with Render Postgres. Netlify's proxy does not carry
 WebSockets, so the host's program stream connects to the worker directly
 (`PUBLIC_INGEST_URL`); the ingest token, not the origin, is what authorises it.
 
 ### What to change before real production load
 
 1. **Recordings and assets on object storage.** They live on the API's local storage, which keeps
-   the API at one Cloud Run instance (and a restart loses them). `apps/api/src/routes/files.ts`
+   the API at one instance (a Render service with a disk cannot scale out). `apps/api/src/routes/files.ts`
    is the one place to swap for S3, R2 or GCS; then the API can scale out too.
 2. **TURN.** Guests behind strict firewalls need TURN over TLS; enable it in the LiveKit config.
 3. **Rate limiting** on `/api/auth/*` and `/api/invites/*` at the proxy.
