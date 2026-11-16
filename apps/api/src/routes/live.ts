@@ -6,7 +6,7 @@ import {
   type EgressStatus,
   type GoLiveResult,
 } from '@studio/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { z } from 'zod';
@@ -150,22 +150,26 @@ export function liveRoutes(app: FastifyInstance, deps: Deps): void {
     const claims = await deps.signer.verify<IngestClaims>('ingest', token);
     if (!claims) throw new HttpError(401, 'bad_token', 'Invalid or expired ingest token');
 
+    // Each claim gets a higher attempt number than any before it, in one statement, so two
+    // workers claiming at once still get different numbers.
     const [session] = await db
-      .select()
-      .from(egressSessions)
-      .where(eq(egressSessions.broadcastId, claims.bid));
-    if (!session || session.mode !== 'relay') throw notFound('Egress session');
+      .update(egressSessions)
+      .set({ attempt: sql`${egressSessions.attempt} + 1` })
+      .where(and(eq(egressSessions.broadcastId, claims.bid), eq(egressSessions.mode, 'relay')))
+      .returning();
+    if (!session) throw notFound('Egress session');
     return {
       broadcastId: claims.bid,
       targets: deps.box.openJson<EgressTarget[]>(session.targetsEnc),
       record: true,
+      attempt: session.attempt,
     };
   });
 
   app.post('/internal/egress/status', async (req) => {
     requireInternal(req);
-    await applyEgressStatus(deps, parse(egressStatusSchema, req.body));
-    return { ok: true };
+    const applied = await applyEgressStatus(deps, parse(egressStatusSchema, req.body));
+    return { ok: true, applied };
   });
 
   // --- LiveKit Egress webhook (livekit mode). The signature is checked against the API secret. ---

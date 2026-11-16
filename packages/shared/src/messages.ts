@@ -26,6 +26,11 @@ export const egressStatusSchema = z.object({
   targets: z.array(targetStatusSchema),
   error: z.string().nullable(),
   recording: z.object({ file: z.string(), sizeBytes: z.number() }).nullable(),
+  /**
+   * Which claim of the ingest token this report belongs to. The API ignores a report from an
+   * older claim, so a worker the host has since moved away from cannot end the broadcast.
+   */
+  attempt: z.number().int().optional(),
 });
 export type EgressStatus = z.infer<typeof egressStatusSchema>;
 
@@ -34,6 +39,8 @@ export const egressJobSchema = z.object({
   broadcastId: z.string(),
   targets: z.array(z.object({ destinationId: z.string(), url: z.string() })),
   record: z.boolean(),
+  /** Goes up by one on every claim of the same broadcast's ingest token. */
+  attempt: z.number().int().optional(),
 });
 export type EgressJob = z.infer<typeof egressJobSchema>;
 

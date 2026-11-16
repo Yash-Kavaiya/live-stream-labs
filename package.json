@@ -1,5 +1,5 @@
 {
-  "name": "streamlabs-studio",
+  "name": "omnicast-studio",
   "private": true,
   "type": "module",
   "workspaces": [

@@ -1,0 +1,1 @@
+ALTER TABLE "egress_sessions" ADD COLUMN "attempt" integer DEFAULT 0 NOT NULL;

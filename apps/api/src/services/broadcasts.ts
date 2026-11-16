@@ -189,8 +189,18 @@ export async function finishBroadcast(deps: Deps, broadcastId: string): Promise<
  * Single entry point for egress progress, whichever provider reports it (media worker or LiveKit
  * webhook). Persists it, then fans it out to the studio over the room's data channel.
  */
-export async function applyEgressStatus(deps: Deps, status: EgressStatus): Promise<void> {
+export async function applyEgressStatus(deps: Deps, status: EgressStatus): Promise<boolean> {
   const { broadcastId } = status;
+
+  // A report from an older claim comes from a worker the host has since left (a reconnect that
+  // reached another instance). It must not end or overwrite the broadcast now running elsewhere.
+  if (status.attempt !== undefined) {
+    const [session] = await deps.db
+      .select({ attempt: egressSessions.attempt })
+      .from(egressSessions)
+      .where(eq(egressSessions.broadcastId, broadcastId));
+    if (session && status.attempt < session.attempt) return false;
+  }
   for (const target of status.targets) {
     await setTargetStatus(deps, broadcastId, target.destinationId, target.status, target.error);
   }
@@ -210,4 +220,5 @@ export async function applyEgressStatus(deps: Deps, status: EgressStatus): Promi
   }
 
   await deps.livekit.sendData(roomName(broadcastId), TOPIC_EGRESS, status);
+  return true;
 }

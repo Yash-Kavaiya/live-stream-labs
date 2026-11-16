@@ -263,7 +263,7 @@ export async function enrichItems(fetch: Fetch, items: NewsItem[], limit = READ_
 // ---------- Collecting ----------
 
 const TIMEOUT_MS = 10_000;
-const USER_AGENT = 'streamlabs-studio/0.1 (daily news rundown)';
+const USER_AGENT = 'omnicast-studio/0.1 (daily news rundown)';
 const DAY = 24 * 60 * 60 * 1000;
 /** Blog and news posts older than this are yesterday's show. */
 const FRESH_MS = 2 * DAY;

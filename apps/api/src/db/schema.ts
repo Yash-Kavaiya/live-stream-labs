@@ -1,5 +1,5 @@
 import type { BroadcastStatus, DestinationStatus, PlatformId, Rundown, Scene } from '@studio/shared';
-import { bigint, jsonb, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, integer, jsonb, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const ts = (name: string) => timestamp(name, { withTimezone: true });
@@ -78,6 +78,8 @@ export const egressSessions = pgTable('egress_sessions', {
   /** Sealed list of RTMP targets, stream keys included. */
   targetsEnc: text('targets_enc').notNull(),
   externalId: text('external_id'),
+  /** Goes up on every claim of the ingest token; reports from an older claim are ignored. */
+  attempt: integer('attempt').notNull().default(0),
   createdAt: createdAt(),
 });
 

@@ -15,6 +15,14 @@ afterAll(() => t.close());
 const internal = { 'x-internal-secret': '' };
 const STREAM_KEY = 'super-secret-key-123';
 
+describe('health', () => {
+  it('reports ready while the database answers', async () => {
+    const res = await t.app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+  });
+});
+
 describe('auth', () => {
   it('signs up, rejects a duplicate email, and reports the current user', async () => {
     expect((await host.signup()).status).toBe(200);
@@ -86,6 +94,7 @@ describe('broadcast lifecycle', () => {
   let broadcastId: string;
   let destinationId: string;
   let room: string;
+  let ingestToken: string;
 
   it('creates a broadcast with destinations attached', async () => {
     destinationId = (await host.call('GET', '/api/destinations')).body[0].id;
@@ -179,8 +188,10 @@ describe('broadcast lifecycle', () => {
     expect(claim.json()).toEqual({
       broadcastId,
       record: true,
+      attempt: 1,
       targets: [{ destinationId, url: `rtmp://a.rtmp.youtube.com/live2/${STREAM_KEY}` }],
     });
+    ingestToken = token;
 
     const dto = (await host.call('GET', `/api/broadcasts/${broadcastId}`)).body;
     expect(dto.status).toBe('live');
@@ -191,9 +202,30 @@ describe('broadcast lifecycle', () => {
   const report = (status: EgressStatus) =>
     t.app.inject({ method: 'POST', url: '/internal/egress/status', payload: status, headers: internal });
 
+  it('ignores a worker the host has moved away from, so it cannot end the broadcast', async () => {
+    // The host's connection reached a second worker, which claims the same token again.
+    const again = await t.app.inject({ method: 'POST', url: '/internal/egress/claim', payload: { token: ingestToken }, headers: internal });
+    expect(again.json().attempt).toBe(2);
+
+    // The first worker's grace period runs out and it reports the end of its stretch.
+    const stale = await report({
+      broadcastId,
+      attempt: 1,
+      state: 'ended',
+      error: null,
+      recording: null,
+      targets: [{ destinationId, status: 'ended', error: null }],
+    });
+    expect(stale.json()).toEqual({ ok: true, applied: false });
+    const dto = (await host.call('GET', `/api/broadcasts/${broadcastId}`)).body;
+    expect(dto.status).toBe('live');
+    expect(dto.destinations[0].status).toBe('connecting');
+  });
+
   it('records per-destination status from the worker and relays it to the studio', async () => {
     const status: EgressStatus = {
       broadcastId,
+      attempt: 2,
       state: 'live',
       error: null,
       recording: null,
@@ -226,6 +258,17 @@ describe('broadcast lifecycle', () => {
 
     const shared = await new TestClient(t.app).call('GET', `/api/watch/${recordings[0].shareToken}`);
     expect(shared.body.title).toBe('Launch day');
+
+    // A worker without a disk in common with the API hands the file over.
+    const bytes = Buffer.alloc(4096, 7);
+    const upload = (headers: Record<string, string>, file = 'rec-1.mp4') =>
+      t.app.inject({ method: 'POST', url: `/internal/recordings/${file}`, payload: bytes, headers: { 'content-type': 'video/mp4', ...headers } });
+    expect((await upload({})).statusCode).toBe(403);
+    expect((await upload(internal, 'x.exe')).statusCode).toBe(400);
+    expect((await upload(internal)).statusCode).toBe(200);
+    const video = await t.app.inject({ method: 'GET', url: `/api/watch/${recordings[0].shareToken}/video` });
+    expect(video.statusCode).toBe(200);
+    expect(video.rawPayload.equals(bytes)).toBe(true);
   });
 
   it('refuses to go live without a destination', async () => {

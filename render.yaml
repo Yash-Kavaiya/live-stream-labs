@@ -1,0 +1,127 @@
+# OmniCast Studio on Render: one Blueprint creates the whole stack.
+#
+#   Render dashboard → New → Blueprint → pick this repository → enter the three LIVEKIT_* values.
+#
+# Only omnicast-web is public. The API and the media worker are private services, reached over
+# Render's private network through the web service's proxy (infra/Caddyfile.cloudrun).
+#
+# LiveKit (cameras, guests) cannot run on Render, which has no UDP ports for WebRTC: use a LiveKit
+# Cloud project (https://cloud.livekit.io) and paste its URL, API key and secret when asked.
+#
+# If Render gives the web service a different address than https://omnicast-web.onrender.com
+# (the name was taken), change WEB_ORIGIN and PUBLIC_INGEST_URL on omnicast-api to match.
+
+services:
+  # The app, and the one public address: serves the built web app and proxies /api, /assets and
+  # the /ingest WebSocket (the host's program stream) to the private services.
+  - type: web
+    name: omnicast-web
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./infra/render/web.Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: API_UPSTREAM
+        fromService: { type: pserv, name: omnicast-api, property: hostport }
+      - key: WORKER_UPSTREAM
+        fromService: { type: pserv, name: omnicast-worker, property: hostport }
+
+  # Accounts, broadcasts, stream keys (encrypted), recordings and uploads. Its disk holds the
+  # uploaded images, music and recordings; a service with a disk runs as one instance.
+  - type: pserv
+    name: omnicast-api
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./infra/render/api.Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    disk:
+      name: omnicast-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4000'
+      - key: API_PORT
+        value: '4000'
+      - key: DATA_DIR
+        value: /data
+      - key: DATABASE_URL
+        fromDatabase: { name: omnicast-db, property: connectionString }
+      - key: WEB_ORIGIN
+        value: https://omnicast-web.onrender.com
+      - key: PUBLIC_INGEST_URL
+        value: wss://omnicast-web.onrender.com/ingest
+      - key: EGRESS_MODE
+        value: relay
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: INTERNAL_SECRET
+        generateValue: true
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # Optional: one-click platform connect and the daily AI news rundown. Set in the dashboard.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # The encoder: takes each host's program stream, encodes it once and runs one relay per
+  # platform. It keeps no state, so more instances can be added as more shows go live at once.
+  - type: pserv
+    name: omnicast-worker
+    runtime: docker
+    region: singapore
+    plan: 2c-4g
+    dockerfilePath: ./infra/render/worker.Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    numInstances: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4100'
+      - key: WORKER_PORT
+        value: '4100'
+      - key: DATA_DIR
+        value: /tmp/data
+      - key: API_INTERNAL_URL
+        fromService: { type: pserv, name: omnicast-api, property: hostport }
+      - key: INTERNAL_SECRET
+        fromService: { type: pserv, name: omnicast-api, envVarKey: INTERNAL_SECRET }
+      # The worker's disk is temporary: each recording is handed to the API when it ends.
+      - key: UPLOAD_RECORDINGS
+        value: '1'
+      # 1080p at 30 fps, 6000 kbit/s: what 2 CPUs encode in real time. On 1 CPU use 1280x720 at 4500.
+      - key: ENCODE_WIDTH
+        value: '1920'
+      - key: ENCODE_HEIGHT
+        value: '1080'
+      - key: ENCODE_FPS
+        value: '30'
+      - key: ENCODE_VIDEO_KBPS
+        value: '6000'
+
+databases:
+  - name: omnicast-db
+    region: singapore
+    plan: 0.1c-256mb
+    databaseName: omnicast
+    user: omnicast

@@ -19,7 +19,8 @@ export const DEFAULT_ENCODE: EncodeSettings = {
 };
 
 export interface TeeOutput {
-  format: 'flv' | 'mp4';
+  /** `mpegts` is the encoded program handed to the per-destination relays; `mp4` is the recording. */
+  format: 'mpegts' | 'mp4';
   url: string;
 }
 
@@ -28,26 +29,16 @@ function escapeTee(url: string): string {
   return url.replace(/\\/g, '/').replace(/(['|])/g, '\\$1');
 }
 
-/** About 20 seconds of video and audio packets: what one destination may fall behind by. */
-const QUEUE_PACKETS = 1500;
-
-/**
- * Each platform gets a queue of its own. The tee muxer otherwise writes to its outputs in turn, so
- * one platform that takes the upload slowly holds back all the others and the encoder with them,
- * until the whole stream is so far behind that it is stopped. With a queue, a slow platform loses
- * some of its own stream and nobody else notices. The inner `:` is escaped twice, once for each
- * level of options.
- */
-const NETWORK_QUEUE = `use_fifo=1:fifo_options=queue_size=${QUEUE_PACKETS}\\\\:drop_pkts_on_overflow=1:rw_timeout=10000000`;
-
 export function teeSpec(outputs: TeeOutput[]): string {
   return outputs
     .map(({ format, url }) => {
       // Fragmented MP4 stays playable even if ffmpeg is killed mid-stream.
+      // The program pipe repeats the H.264 headers on every keyframe (`dump_extra`), so a relay that
+      // joins or rejoins mid-stream can start decoding at the next keyframe.
       const options =
         format === 'mp4'
           ? 'f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof:onfail=ignore'
-          : `f=flv:flvflags=no_duration_filesize:onfail=ignore:${NETWORK_QUEUE}`;
+          : 'f=mpegts:bsfs/v=dump_extra';
       return `[${options}]${escapeTee(url)}`;
     })
     .join('|');
@@ -55,8 +46,8 @@ export function teeSpec(outputs: TeeOutput[]): string {
 
 /**
  * One encode, many outputs. The program arrives on stdin as the browser's MediaRecorder stream
- * (WebM); it is transcoded once to H.264 + AAC and the tee muxer copies that to every output.
- * `onfail=ignore` keeps the other outputs running when one destination drops.
+ * (WebM); it is transcoded once to H.264 + AAC. The tee muxer writes it as MPEG-TS to stdout, from
+ * where each platform's relay copies it (see `relay.ts`), and to the recording file.
  */
 export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = DEFAULT_ENCODE): string[] {
   if (outputs.length === 0) throw new Error('At least one output is required');
@@ -111,21 +102,32 @@ export function buildFfmpegArgs(outputs: TeeOutput[], encode: EncodeSettings = D
   ];
 }
 
-/** True when a destination's queue filled up and part of its stream was thrown away. */
-export function isQueueOverflow(line: string): boolean {
-  return /FIFO queue full/i.test(line);
-}
-
-/** `Slave muxer #1 failed: ...` → 1. The index matches the order of `outputs`. */
-export function parseFailedOutput(line: string): number | null {
-  const match = /Slave muxer #(\d+) failed/.exec(line);
-  return match ? Number(match[1]) : null;
-}
-
-/** `[fifo @ ...] Error opening rtmp://host/app/key: ...` → the address that could not be reached. */
-export function parseUnopenedOutput(line: string): string | null {
-  const match = /\[fifo @ [^\]]+\] Error opening (.+): [^:]+$/.exec(line);
-  return match ? match[1]! : null;
+/**
+ * One destination: copies the encoded program from stdin to the platform without re-encoding, so
+ * each relay costs almost no CPU. MPEG-TS can be joined at any point, which is what lets a relay
+ * be restarted mid-broadcast; ffmpeg skips ahead to the next keyframe on its own.
+ */
+export function buildRelayArgs(url: string): string[] {
+  return [
+    '-hide_banner',
+    '-loglevel', 'info',
+    // The streams are announced in the MPEG-TS header and the H.264 settings come with every
+    // keyframe, so a second of looking is plenty. The default, five seconds, would be five seconds
+    // of the platform's stream missing at every start and reconnect.
+    '-analyzeduration', '1000000',
+    '-probesize', '2000000',
+    '-f', 'mpegts',
+    '-i', 'pipe:0',
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
+    '-c', 'copy',
+    '-bsf:a', 'aac_adtstoasc',
+    '-f', 'flv',
+    '-flvflags', 'no_duration_filesize',
+    // A platform that stops reading is given up on after 10 s instead of hanging the relay.
+    '-rw_timeout', '10000000',
+    url,
+  ];
 }
 
 export interface Progress {
